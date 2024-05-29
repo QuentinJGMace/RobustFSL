@@ -1,0 +1,8 @@
+torch<2.0
+numpy
+loguru==0.5.3
+matplotlib
+PyYAML
+scikit-learn
+torchvision
+tqdm
