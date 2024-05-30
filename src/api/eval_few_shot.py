@@ -319,6 +319,11 @@ class Evaluator_few_shot:
 
         return mean_accuracies, mean_times
 
+    def get_method_val_param(self):
+        # fixes for each method the name of the parameter on which validation is performed
+        if self.args.name_method == "RPADDLE":
+            self.val_param = self.args.lambd
+
     # TODO : implement it
     def report_results(self, mean_accuracies, mean_times):
         """
@@ -328,4 +333,89 @@ class Evaluator_few_shot:
             mean_accuracies : Mean accuracies of the evaluation.
             mean_times : Mean time taken for evaluation.
         """
-        raise NotImplementedError("Report logs not implemented yet")
+        self.logger.info("----- Final results -----")
+
+        path = "results_few_shot/{}/{}".format(
+            self.args.used_test_set, self.args.dataset
+        )
+
+        # If validation mode
+        if self.args.used_test_set == "val":
+            self.get_method_val_param()
+            name_file = path + "/{}_s{}.txt".format(
+                self.args.name_method, self.args.shots
+            )
+
+            if not os.path.exists(path):
+                os.makedirs(path)
+            if os.path.isfile(name_file) == True:
+                f = open(name_file, "a")
+            else:
+                f = open(name_file, "w")
+                f.write("val_param" + "\t" + "acc" + "\n")
+
+            self.logger.info(
+                "{}-shot mean test accuracy over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_accuracies
+                )
+            )
+
+            f.write(str(self.val_param) + "\t")
+            f.write(str(round(100 * mean_accuracies, 2)) + "\t")
+            f.write("\n")
+            f.close()
+
+        # if test mode
+        elif self.args.used_test_set == "test" and self.args.save_results == True:
+            var = (
+                str(self.args.shots)
+                + "\t"
+                + str(self.args.n_query)
+                + "\t"
+                + str(self.args.k_eff)
+            )
+            var_names = (
+                "shots" + "\t" + "n_query" + "\t" + "k_eff" + "\t" + "acc" + "\n"
+            )
+
+            path = "results_few_shot/{}/{}".format(
+                self.args.used_test_set, self.args.dataset
+            )
+            name_file = path + "/{}_s{}.txt".format(
+                self.args.name_method, self.args.shots
+            )
+
+            if not os.path.exists(path):
+                os.makedirs(path)
+            if os.path.isfile(name_file) == True:
+                f = open(name_file, "a")
+            else:
+                f = open(name_file, "w")
+                f.write(var_names + "\t" + "\n")
+
+            self.logger.info(
+                "{}-shot mean test accuracy over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_accuracies
+                )
+            )
+            self.logger.info(
+                "{}-shot mean time over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_times
+                )
+            )
+            f.write(str(var) + "\t")
+            f.write(str(round(100 * mean_accuracies, 1)) + "\t")
+            f.write("\n")
+            f.close()
+
+        else:
+            self.logger.info(
+                "{}-shot mean test accuracy over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_accuracies
+                )
+            )
+            self.logger.info(
+                "{}-shot mean time over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_times
+                )
+            )
