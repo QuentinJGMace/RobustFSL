@@ -221,6 +221,41 @@ class Evaluator_few_shot:
                         "Support and query sets have data points in common"
                     )
 
+    # TODO : improve, add feature from completely different image, switch labels
+    def generate_outliers(self, all_features, all_labels, indices):
+        """
+        Randomly generates outliers for the given features and labels.
+
+        Args:
+            all_features : Extracted features for the dataset.
+            all_labels : Labels for the dataset.
+            indices : Indices of the data points that will be taken into the set
+
+        Returns:
+            new_features : Features with outliers.
+            new_labels : Labels with outliers.
+            indices_outliers : Indices of the outliers.
+        """
+
+        # original version that we will modify
+        new_features = all_features[indices].clone()
+        new_labels = all_labels[indices].clone()
+
+        # if no outliers to be added, return the original features and labels
+        if (self.args.n_outliers) == 0:
+            return new_features, new_labels
+
+        # Else chooses random indices and apply transformations
+        indices_outliers = indices[
+            torch.randint(0, len(all_features), (self.args.n_outliers,))
+        ]
+        for i in indices_outliers:
+
+            multiplier = torch.abs(torch.randn(1)) * self.args.outlier_level
+            new_features[i] = multiplier * new_features[i]
+
+        return new_features, new_labels, indices_outliers
+
     def evaluate_tasks(
         self, backbone, features_support, labels_support, features_query, labels_query
     ):
@@ -271,51 +306,65 @@ class Evaluator_few_shot:
             test_loader_query = []
             indices_support, indices_query = [], []
             for indices in sampler_query:
-                test_loader_query.append(
-                    (features_query[indices, :], labels_query[indices])
-                )
+                # TODO store indices where outliers are added for
+                # further analysis
+                (
+                    new_features_q,
+                    new_labels_q,
+                    indices_outliers_q,
+                ) = self.generate_outliers(features_query, labels_query, indices)
+                test_loader_query.append((new_features_q, new_labels_q))
                 indices_query.append(indices)
 
             test_loader_support = []
             for indices in sampler_support:
-                test_loader_support.append(
-                    (features_support[indices, :], labels_support[indices])
-                )
+                (
+                    new_features_s,
+                    new_labels_s,
+                    indices_outliers_s,
+                ) = self.generate_outliers(features_support, labels_support, indices)
+                test_loader_query.append((new_features_s, new_labels_s))
                 indices_support.append(indices)
 
             self.check_intersection(indices_support, indices_query)
 
-        #     # Prepare the tasks
-        #     task_generator = Task_Generator_Few_shot(
-        #         k_eff=self.args.k_eff, shot=self.args.shots, n_query=self.args.n_query, n_class=self.args.n_class, loader_support=test_loader_support, loader_query=test_loader_query, backbone=backbone, args = self.args
-        #     )
+            # Prepare the tasks
+            task_generator = Task_Generator_Few_shot(
+                k_eff=self.args.k_eff,
+                shot=self.args.shots,
+                n_query=self.args.n_query,
+                n_class=self.args.n_class,
+                loader_support=test_loader_support,
+                loader_query=test_loader_query,
+                backbone=backbone,
+                args=self.args,
+            )
 
-        #     tasks = task_generator.generate_tasks()
+            tasks = task_generator.generate_tasks()
 
-        #     # Load the method
-        #     method = self.get_method_builder(
-        #         backbone=backbone, device=self.device, args=self.args, log_file = self.log_file
-        #     )
-        #     # set the optimal parameter for the method if the test set is used
-        #     if self.args.used_test_set == 'test' and self.args.tunable:
-        #         self.set_method_opt_param()
+            # Load the method
+            method = self.get_method_builder(
+                backbone=backbone,
+                device=self.device,
+                args=self.args,
+                log_file=self.log_file,
+            )
+            # set the optimal parameter for the method if the test set is used
+            if self.args.used_test_set == "test" and self.args.tunable:
+                self.set_method_opt_param()
 
-        #     # Run task
-        #     logs = method.run_task(task_dic=tasks, shot=self.args.shots)
-        #     acc_mean, acc_conf = compute_confidence_interval(
-        #         logs['acc'][:, -1]
-        #     )
-        #     timestamps, criterions = logs["timestamps"], logs["criterions"]
-        #     results_task.append(acc_mean)
-        #     results_task_time.append(timestamps)
+            # Run task
+            logs = method.run_task(task_dic=tasks, shot=self.args.shots)
+            acc_mean, acc_conf = compute_confidence_interval(logs["acc"][:, -1])
+            timestamps, criterions = logs["timestamps"], logs["criterions"]
+            results_task.append(acc_mean)
+            results_task_time.append(timestamps)
 
-        #     del method
-        #     del tasks
+            del method
+            del tasks
 
-        # mean_accuracies = np.mean(np.asarray(results_task))
-        # mean_times = np.mean(np.asarray(results_task_time))
-
-        return 1 / 0
+        mean_accuracies = np.mean(np.asarray(results_task))
+        mean_times = np.mean(np.asarray(results_task_time))
 
         return mean_accuracies, mean_times
 
