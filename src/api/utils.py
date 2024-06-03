@@ -120,7 +120,7 @@ def _check_and_coerce_cfg_value_type(replacement, original, key, full_key):
     except Exception:
         pass
 
-    for (from_type, to_type) in casts:
+    for from_type, to_type in casts:
         converted, converted_value = conditional_cast(from_type, to_type)
         if converted:
             return converted_value

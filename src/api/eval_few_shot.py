@@ -10,6 +10,7 @@ from src.api.sampler_few_shot import (
     CategoriesSampler_few_shot,
     SamplerSupport_few_shot,
     SamplerQuery_few_shot,
+    SamplerSupportAndQuery,
 )
 from src.dataset import DATASET_LIST
 from src.dataset import build_data_loader
@@ -194,7 +195,7 @@ class Evaluator_few_shot:
 
         # few-shot methods
         if args.name_method == "RPADDLE":
-            method_builder = RobustPaddle(**method_info)
+            method_builder = RobustPaddle_GD(**method_info)
 
         else:
             raise ValueError(
@@ -209,12 +210,21 @@ class Evaluator_few_shot:
         raise NotImplementedError("Optimal parameter setting not implemented yet")
 
     def check_intersection(self, indices_support, indices_query):
+        """
+        Check if there is an intersection between the support and query set indices
+
+        Args :
+            indices_support : Indices of the support set
+            indices_query : Indices of the query set
+
+        Returns :
+            True if there is an intersection, False otherwise
+        """
         for i, indices in enumerate(indices_support):
             for indice in indices:
                 if indice in indices_query[i]:
-                    raise ValueError(
-                        "Support and query sets have data points in common"
-                    )
+                    return True
+        return False
 
     # TODO : improve, add feature from completely different image, switch labels
     def generate_outliers(self, all_features, all_labels, indices):
@@ -292,36 +302,33 @@ class Evaluator_few_shot:
             )
             sampler.create_list_classes(labels_support, labels_query)
 
-            sampler_support = SamplerSupport_few_shot(sampler)
-            sampler_query = SamplerQuery_few_shot(sampler)
+            sampler_support_query = SamplerSupportAndQuery(sampler)
 
-            # TODO : I think it is buggy,
-            # the support and query sets could have data points in common
-            # Get query and support samples
-            test_loader_query = []
-            indices_support, indices_query = [], []
-            for indices in sampler_query:
-                # TODO store indices where outliers are added for
-                # further analysis
-                (
-                    new_features_q,
-                    new_labels_q,
-                    indices_outliers_q,
-                ) = self.generate_outliers(features_query, labels_query, indices)
-                test_loader_query.append((new_features_q, new_labels_q))
-                indices_query.append(indices)
+            test_loader_query, test_loader_support = [], []
+            list_indices_support, list_indices_query = [], []
+            list_indices_outlier_support, list_indices_outlier_query = [], []
 
-            test_loader_support = []
-            for indices in sampler_support:
+            for indices_support, indices_query in sampler_support_query:
                 (
                     new_features_s,
                     new_labels_s,
                     indices_outliers_s,
-                ) = self.generate_outliers(features_support, labels_support, indices)
-                test_loader_query.append((new_features_s, new_labels_s))
-                indices_support.append(indices)
+                ) = self.generate_outliers(
+                    features_support, labels_support, indices_support
+                )
+                test_loader_support.append((new_features_s, new_labels_s))
+                (
+                    new_features_q,
+                    new_labels_q,
+                    indices_outliers_q,
+                ) = self.generate_outliers(features_query, labels_query, indices_query)
+                test_loader_query.append((new_features_q, new_labels_q))
+                list_indices_query.append(indices_query)
+                list_indices_support.append(indices_support)
+                list_indices_outlier_query.append(indices_outliers_q)
+                list_indices_outlier_support.append(indices_outliers_s)
 
-            self.check_intersection(indices_support, indices_query)
+            assert not self.check_intersection(list_indices_support, list_indices_query)
 
             # Prepare the tasks
             task_generator = Task_Generator_Few_shot(
