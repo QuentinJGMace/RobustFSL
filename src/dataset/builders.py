@@ -1,5 +1,50 @@
 import torch
+import torchvision.transforms as T
+
+from src.dataset.transform import *
 from src.dataset.base_classes import DatasetWrapper
+
+
+def build_transform(
+    size,
+    jitter=False,
+    enlarge=False,
+    augment=False,
+):
+    normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    if enlarge:
+        resize = int(size * 256.0 / 224.0)
+    else:
+        resize = size
+    if not augment:
+        return T.Compose(
+            [
+                T.Resize(resize),
+                T.CenterCrop(size),
+                T.ToTensor(),
+                normalize,
+            ]
+        )
+    else:
+        if jitter:
+            return T.Compose(
+                [
+                    T.RandomResizedCrop(size),
+                    ImageJitter(dict(Brightness=0.4, Contrast=0.4, Color=0.4)),
+                    T.RandomHorizontalFlip(),
+                    T.ToTensor(),
+                    normalize,
+                ]
+            )
+        else:
+            return T.Compose(
+                [
+                    T.RandomResizedCrop(size),
+                    T.RandomHorizontalFlip(),
+                    T.ToTensor(),
+                    normalize,
+                ]
+            )
 
 
 def build_data_loader(
@@ -32,11 +77,12 @@ def build_data_loader(
     return data_loader
 
 
-def initialize_data_loaders(self, dataset, preprocess):
+def initialize_data_loaders(args, dataset, preprocess):
     """
     Initialisises the data loaders
 
     Args:
+        args : config args
         dataset: The dataset to be used.
         preprocess: Preprocessing function for data.
 
@@ -45,7 +91,7 @@ def initialize_data_loaders(self, dataset, preprocess):
                     (dict : {"train": train_loader, "val": val_loader, "test": test_loader})
     """
     # if batch size is an argument, use it, otherwise use the default batch size to 1024
-    batch_size = self.args.batch_size if self.args.batch_size else 1024
+    batch_size = args.batch_size if args.batch_size else 1024
 
     data_loaders = {
         "train": build_data_loader(
