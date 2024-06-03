@@ -189,9 +189,9 @@ class RobustPaddle_GD(AbstractMethod):
         return matY
 
 
-class MultNoisePaddle(RobustPADDLE_GD):
+class MultNoisePaddle(RobustPaddle_GD):
     def __init__(self, backbone, device, log_file, args):
-        super(RobustPADDLE_GD, self).__init__(backbone, device, log_file, args)
+        super(RobustPaddle_GD, self).__init__(backbone, device, log_file, args)
 
         self.lambd = args.lambd
         self.lr = args.lr

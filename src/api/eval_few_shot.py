@@ -11,14 +11,9 @@ from src.api.sampler_few_shot import (
     SamplerSupport_few_shot,
     SamplerQuery_few_shot,
 )
-from src.dataset import MiniImageNet
+from src.dataset import DATASET_LIST
 from src.dataset import build_data_loader
-from src.methods import RobustPaddle
-
-# Dataset list for FSL tasks
-dataset_list = {
-    "miniimagenet": MiniImageNet,
-}
+from src.methods import RobustPaddle_GD
 
 
 class Evaluator_few_shot:
@@ -167,7 +162,7 @@ class Evaluator_few_shot:
         # backbone.eval()
 
         # Init dataset and data loaders
-        dataset = dataset_list[self.args.dataset](self.args.dataset_path)
+        dataset = DATASET_LIST[self.args.dataset](self.args.dataset_path)
         self.args.classnames = dataset.classnames
         data_loaders = self.initialize_data_loaders(dataset, preprocess)
 
