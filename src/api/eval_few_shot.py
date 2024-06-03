@@ -10,6 +10,7 @@ from src.api.sampler_few_shot import (
     CategoriesSampler_few_shot,
     SamplerSupport_few_shot,
     SamplerQuery_few_shot,
+    SamplerSupportAndQuery,
 )
 from src.dataset import MiniImageNet
 from src.dataset import build_data_loader
@@ -214,12 +215,21 @@ class Evaluator_few_shot:
         raise NotImplementedError("Optimal parameter setting not implemented yet")
 
     def check_intersection(self, indices_support, indices_query):
+        """
+        Check if there is an intersection between the support and query set indices
+
+        Args :
+            indices_support : Indices of the support set
+            indices_query : Indices of the query set
+
+        Returns :
+            True if there is an intersection, False otherwise
+        """
         for i, indices in enumerate(indices_support):
             for indice in indices:
                 if indice in indices_query[i]:
-                    raise ValueError(
-                        "Support and query sets have data points in common"
-                    )
+                    return True
+        return False
 
     def evaluate_tasks(
         self, backbone, features_support, labels_support, features_query, labels_query
@@ -262,28 +272,22 @@ class Evaluator_few_shot:
             )
             sampler.create_list_classes(labels_support, labels_query)
 
-            sampler_support = SamplerSupport_few_shot(sampler)
-            sampler_query = SamplerQuery_few_shot(sampler)
+            sampler_support_query = SamplerSupportAndQuery(sampler)
 
-            # TODO : I think it is buggy,
-            # the support and query sets could have data points in common
-            # Get query and support samples
-            test_loader_query = []
-            indices_support, indices_query = [], []
-            for indices in sampler_query:
-                test_loader_query.append(
-                    (features_query[indices, :], labels_query[indices])
-                )
-                indices_query.append(indices)
-
-            test_loader_support = []
-            for indices in sampler_support:
+            test_loader_query, test_loader_support = [], []
+            list_indices_support, list_indices_query = [], []
+            for indices_support, indices_query in sampler_support_query:
                 test_loader_support.append(
-                    (features_support[indices, :], labels_support[indices])
+                    features_support[indices_support, :],
+                    labels_support[indices_support],
                 )
-                indices_support.append(indices)
+                test_loader_query.append(
+                    features_query[indices_query, :], labels_query[indices_query]
+                )
+                list_indices_query.append(indices_query)
+                list_indices_support.append(indices_support)
 
-            self.check_intersection(indices_support, indices_query)
+            assert not self.check_intersection(list_indices_support, list_indices_query)
 
         #     # Prepare the tasks
         #     task_generator = Task_Generator_Few_shot(

@@ -5,6 +5,7 @@ import torchvision.transforms as T
 from .mini_imagenet import MiniImageNet
 from .utils import build_data_loader
 
+
 # tests if the MiniImageNet loads correctly
 # parametrize the test with the root path
 @pytest.mark.parametrize("root", ["/home/opis/qmace/RobustFSL/data/miniimagenet"])
