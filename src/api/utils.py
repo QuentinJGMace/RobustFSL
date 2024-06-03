@@ -248,56 +248,6 @@ def load_pickle(file):
         return pickle.load(f)
 
 
-def extract_features(backbone, dataset, loader, set_name, args, device):
-    """
-    inputs:
-        backbone : The loaded model containing the feature extractor
-        train_loader : Train data loader
-        args : arguments
-        device : GPU device
-
-    returns :
-        Saves the features in data/args.dataset/saved_features/ under the name
-        '{}_visual_{}.plk'.format(set_name, args.backbone)
-    """
-
-    # Check if features are already saved
-    features_save_path = "data/{}/saved_features/{}_visual_{}.plk".format(
-        args.dataset, set_name, args.backbone
-    )
-    if os.path.exists(features_save_path):
-        print("Features already saved for {} set, skipping".format(set_name))
-    else:
-        print("Extracting {} features on {}".format(set_name, args.dataset))
-
-        # Extract features and labels
-        for i, (images, labels) in enumerate(tqdm(loader)):
-
-            # for images, labels in loader:
-            images = images.to(device)
-            labels = labels.to(device)
-            with torch.no_grad():
-                features = backbone(images, feature=True).float()
-                features /= features.norm(dim=-1, keepdim=True)  # Normalise features
-                if i == 0:
-                    all_features = features
-                    all_labels = labels.cpu()
-                else:
-                    all_features = torch.cat((all_features, features), dim=0)
-                    all_labels = torch.cat((all_labels, labels.cpu()), dim=0)
-
-        # Save features
-        extracted_features_dic = {
-            "concat_features": all_features,
-            "concat_labels": all_labels,
-        }
-        try:
-            os.mkdir("data/{}/saved_features/".format(args.dataset))
-        except:
-            pass
-        save_pickle(features_save_path, extracted_features_dic)
-
-
 def get_metric(metric_type):
     METRICS = {
         "cosine": lambda gallery, query: 1.0
