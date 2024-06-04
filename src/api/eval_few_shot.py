@@ -160,7 +160,7 @@ class Evaluator_few_shot:
         :return: Mean accuracies of the evaluation.
         """
 
-        # backbone.eval()
+        backbone.eval()
 
         # Init dataset and data loaders
         dataset = DATASET_LIST[self.args.dataset](self.args.dataset_path)

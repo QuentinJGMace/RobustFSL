@@ -15,6 +15,7 @@ from src.api.utils import (
     Logger,
     get_log_file,
     save_pickle,
+    wrap_tqdm,
 )
 
 torch.cuda.empty_cache()
@@ -22,7 +23,7 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
-def extract_features(args, backbone, data_loader, set_name, device):
+def extract_features(args, backbone, data_loader, set_name, device, disable_tqdm=False):
     """
     Extracts features for the given data loader and saves them.
 
@@ -39,10 +40,12 @@ def extract_features(args, backbone, data_loader, set_name, device):
 
     all_features, all_labels = None, None
 
-    for i, (data, target) in enumerate(tqdm(data_loader)):
+    for i, (data, target) in enumerate(
+        wrap_tqdm(data_loader, disable_tqdm=disable_tqdm)
+    ):
         data = data.to(device)
         with torch.no_grad():
-            features = backbone(data, feature=True)
+            features, _ = backbone(data, feature=True)
             features /= features.norm(dim=-1, keepdim=True)
 
             if i == 0:
@@ -89,7 +92,7 @@ def parse_args() -> argparse.Namespace:
     return cfg
 
 
-def main():
+if __name__ == "__main__":
     args = parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
