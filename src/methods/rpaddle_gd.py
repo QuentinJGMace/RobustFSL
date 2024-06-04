@@ -5,7 +5,7 @@ import time
 import numpy as np
 from tqdm import tqdm
 
-from .abstract_method import AbstractMethod, MinMaxScaler
+from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 
 
 class RobustPaddle_GD(AbstractMethod):

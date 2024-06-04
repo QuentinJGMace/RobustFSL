@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import time
 from tqdm import tqdm
 
-from .abstract_method import AbstractMethod, MinMaxScaler
+from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 
 
 class RobustPaddle(AbstractMethod):

@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from .abstract_method import AbstractMethod
+from src.methods.abstract_method import AbstractMethod
 
 
 class RobustTIM(AbstractMethod):
