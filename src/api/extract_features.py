@@ -114,14 +114,14 @@ def main():
         f"data/{args.dataset}/saved_features/train_features_{args.backbone}.pkl"
     ):
         print("Extracting features from train set")
-        extract_features(backbone, data_loaders["train"], "train", device=device)
+        extract_features(args, backbone, data_loaders["train"], "train", device=device)
     if not os.path.exists(
         f"data/{args.dataset}/saved_features/val_features_{args.backbone}.pkl"
     ):
         print("Extracting features from val set")
-        extract_features(backbone, data_loaders["val"], "val", device=device)
+        extract_features(args, backbone, data_loaders["val"], "val", device=device)
     if not os.path.exists(
         f"data/{args.dataset}/saved_features/test_features_{args.backbone}.pkl"
     ):
         print("Extracting features from test set")
-        extract_features(backbone, data_loaders["test"], "test", device=device)
+        extract_features(args, backbone, data_loaders["test"], "test", device=device)

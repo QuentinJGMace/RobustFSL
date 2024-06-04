@@ -116,3 +116,5 @@ def initialize_data_loaders(args, dataset, preprocess):
             tfm=preprocess,
         ),
     }
+
+    return data_loaders
