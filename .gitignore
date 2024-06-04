@@ -2,6 +2,7 @@ config/
 checkpoints/
 data/
 logs/
+test_notebooks/
 
 .pre-commit-config.yaml
 
