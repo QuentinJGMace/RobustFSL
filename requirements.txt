@@ -1,6 +1,6 @@
-torch<2.0
+torch
 numpy
-loguru==0.5.3
+loguru
 matplotlib
 PyYAML
 scikit-learn

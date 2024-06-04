@@ -1,0 +1,11 @@
+# environment.yaml
+
+name: rfsl2
+channels:
+  - conda-forge
+dependencies:
+  - python==3.10
+  - anaconda
+  - pip
+  - pip:
+    - -r requirements.txt
