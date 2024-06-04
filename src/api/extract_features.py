@@ -7,7 +7,7 @@ import torch.backends.cudnn as cudnn
 import torchvision.transforms as T
 from tqdm import tqdm
 
-from src.backbones import get_backbone
+from src.backbones import get_backbone, load_checkpoint
 from src.dataset import DATASET_LIST, build_transform, initialize_data_loaders
 from src.api.utils import (
     load_cfg_from_cfg_file,
@@ -42,7 +42,7 @@ def extract_features(args, backbone, data_loader, set_name, device):
     for i, (data, target) in enumerate(tqdm(data_loader)):
         data = data.to(device)
         with torch.no_grad():
-            features = backbone(data)
+            features = backbone(data, feature=True)
             features /= features.norm(dim=-1, keepdim=True)
 
             if i == 0:
@@ -109,6 +109,9 @@ def main():
         preprocess=preprocess_transform,
     )
     backbone = get_backbone(args).to(device)
+    checkpoint_path = args.ckpt_path
+
+    load_checkpoint(backbone, checkpoint_path, type="best")
 
     if not os.path.exists(
         f"data/{args.dataset}/saved_features/train_features_{args.backbone}.pkl"
