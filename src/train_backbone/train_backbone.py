@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch.backends.cudnn as cudnn
 import random
@@ -28,14 +29,36 @@ if __name__ == "__main__":
     trainer = Trainer(device=device, preprocess=preprocess_transform, args=args)
 
     optimizer = get_optimizer(args=args, backbone=backbone)
+
+    if args.resume:
+        resume_path = args.ckpt_path + "/checkpoint.pth.tar"
+        if os.path.isfile(resume_path):
+            print("=> loading checkpoint '{}'".format(resume_path))
+            checkpoint = torch.load(resume_path)
+            start_epoch = checkpoint["epoch"]
+            print(start_epoch)
+            backbone.load_state_dict(checkpoint["state_dict"])
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            print(
+                "=> loaded checkpoint '{}' (epoch {})".format(
+                    resume_path, checkpoint["epoch"]
+                )
+            )
+            if "best_prec1" in checkpoint.keys():
+                best_prec1 = checkpoint["best_prec1"]
+            else:
+                best_prec1 = -1
+        else:
+            raise ValueError("No checkpoint found at '{}'".format(resume_path))
+    else:
+        start_epoch, best_prec1 = 0, -1
+
     scheduler = get_scheduler(
         optimizer=optimizer,
         num_batches=len(trainer.train_loader),
         epochs=args.epochs,
         args=args,
     )
-
-    start_epoch, best_prec1 = 0, -1
     init_wandb(args)
     tqdm_loop = wrap_tqdm(list(range(start_epoch, args.epochs)), disable_tqdm=True)
 
@@ -61,6 +84,7 @@ if __name__ == "__main__":
             state={
                 "epoch": epoch + 1,
                 "arch": args.arch,
+                "best_prec1": best_prec1,
                 "state_dict": backbone.state_dict(),
                 "optimizer": optimizer.state_dict(),
             },

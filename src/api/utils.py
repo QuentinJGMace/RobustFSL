@@ -214,12 +214,15 @@ def wrap_tqdm(data_loader, disable_tqdm):
 
 def init_wandb(args):
     # start a new wandb run to track this script
+    resume = "allow" if args.resume else "never"
     wandb.init(
         # set the wandb project where this run will be logged
         project="RFSL",
         # track hyperparameters and run metadata
         config=args,
+        id=args.name,
         name=args.name,
+        resume=resume,
     )
 
 
