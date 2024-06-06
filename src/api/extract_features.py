@@ -12,8 +12,6 @@ from src.dataset import DATASET_LIST, build_transform, initialize_data_loaders
 from src.api.utils import (
     load_cfg_from_cfg_file,
     merge_cfg_from_list,
-    Logger,
-    get_log_file,
     save_pickle,
     wrap_tqdm,
 )
@@ -114,7 +112,7 @@ if __name__ == "__main__":
     backbone = get_backbone(args).to(device)
     checkpoint_path = args.ckpt_path
 
-    load_checkpoint(backbone, checkpoint_path, type="best")
+    load_checkpoint(backbone, checkpoint_path, device, type="best")
 
     if not os.path.exists(
         f"data/{args.dataset}/saved_features/train_features_{args.backbone}.pkl"

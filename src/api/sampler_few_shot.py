@@ -44,7 +44,7 @@ class CategoriesSampler_few_shot:
             m_ind_support : List of indexes where each class appears in the support set
             m_ind_query : List of indexes where each class appears in the query set
         """
-        label_support = np.array(label_support)  # all data label
+        label_support = np.array(label_support.cpu())  # all data label
         self.m_ind_support = []  # the data index of each class
         for i in range(max(label_support) + 1):
             # all data index of this class
@@ -52,7 +52,9 @@ class CategoriesSampler_few_shot:
             ind = torch.from_numpy(ind)
             self.m_ind_support.append(ind)
 
-        label_query = np.array(label_query)  # all data label
+        label_query = np.array(label_query.cpu())  # all data label
+        assert (label_support == label_query).all()
+        # print(max(label_support), min(label_support), len(np.unique(label_support)))
         self.m_ind_query = []  # the data index of each class
         for i in range(max(label_support) + 1):
             # all data index of this class
@@ -176,14 +178,14 @@ class SamplerSupportAndQuery:
                 ]
                 query = []
 
-                complet_possible_samples = self.m_ind_query[classes[0]]
+                complete_possible_samples = self.m_ind_query[classes[0]]
 
                 for c in classes[1:]:
                     complete_possible_samples = torch.cat(
-                        (complet_possible_samples, self.m_ind_query[c]), 0
+                        (complete_possible_samples, self.m_ind_query[c]), 0
                     )
-
-                pos = torch.randperm(complet_possible_samples.size(0))[: self.n_query]
+                # print("all_possible_samples", complete_possible_samples)
+                pos = torch.randperm(complete_possible_samples.size(0))[: self.n_query]
                 query = complete_possible_samples[pos]
 
                 if self.force_query_size == False:

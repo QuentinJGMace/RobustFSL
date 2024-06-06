@@ -23,16 +23,16 @@ def save_checkpoint(
         shutil.copyfile(folder + "/" + filename, folder + "/model_best.pth.tar")
 
 
-def load_checkpoint(model, model_path, type="best"):
+def load_checkpoint(model, model_path, device, type="best"):
     if type == "best":
         checkpoint = torch.load(
             "{}/model_best.pth.tar".format(model_path),
-            map_location=torch.device("cpu"),
+            map_location=torch.device(device),
         )
     elif type == "last":
         checkpoint = torch.load(
             "{}/checkpoint.pth.tar".format(model_path),
-            map_location=torch.device("cpu"),
+            map_location=torch.device(device),
         )
     else:
         assert False, "type should be in [best, or last], but got {}".format(type)
