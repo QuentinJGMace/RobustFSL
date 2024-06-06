@@ -1,4 +1,6 @@
 import os
+import random
+from collections import defaultdict
 import csv
 
 import torchvision.transforms as transforms
@@ -1030,6 +1032,10 @@ class MiniImageNet(DatasetBase):
 
         self.image_dir = os.path.join(root, "images")
 
+        self.label_mapping, self.inv_label_mapping = defaultdict(dict), defaultdict(
+            dict
+        )
+
         train_preprocess = transforms.Compose(
             [
                 transforms.RandomResizedCrop(
@@ -1046,16 +1052,23 @@ class MiniImageNet(DatasetBase):
             ]
         )
 
-        train = self.read_data(root, "train.csv", classes_to_label)
-        val = self.read_data(root, "val.csv", classes_to_label)
-        test = self.read_data(root, "test.csv", classes_to_label)
+        train = self.read_data(root, "train.csv", classes_to_label, "train")
+        random.shuffle(train)
+        prop = int(0.8 * len(train))
+        train_t = train[:prop]
+        train_val = train[prop:]
+        val = self.read_data(root, "val.csv", classes_to_label, "val")
+        test = self.read_data(root, "test.csv", classes_to_label, "test")
 
-        super().__init__(train_x=train, val=val, test=test)
+        super().__init__(
+            train_x=train, train_t=train_t, train_val=train_val, val=val, test=test
+        )
 
-    def read_data(self, root, split_file, classes_to_label):
+    def read_data(self, root, split_file, classes_to_label, split_name):
         filepath = os.path.join(root, split_file)
         items = []
 
+        unique_labels = set()
         with open(filepath, "r") as f:
             lines = f.readlines()
             for line in lines:
@@ -1063,9 +1076,14 @@ class MiniImageNet(DatasetBase):
                 imname = line[1]
                 class_id = line[0]
                 label = classes_to_label[class_id]
+                if label not in unique_labels:
+                    self.label_mapping[split_name][label] = len(unique_labels)
+                    self.inv_label_mapping[split_name][len(unique_labels)] = label
+                    unique_labels.add(label)
                 classname = imagenet_classes[label]
+                new_label = self.label_mapping[split_name][label]
                 impath = os.path.join(root, class_id, imname)
-                item = Datum(impath=impath, label=label, classname=class_id)
+                item = Datum(impath=impath, label=new_label, classname=class_id)
                 items.append(item)
 
         return items

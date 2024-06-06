@@ -53,9 +53,18 @@ class DatasetBase:
     """
 
     def __init__(
-        self, train_x=None, train_u=None, val=None, test=None, classnames=None
+        self,
+        train_x=None,
+        train_t=None,
+        train_val=None,
+        train_u=None,
+        val=None,
+        test=None,
+        classnames=None,
     ):
         self._train_x = train_x
+        self._train_t = train_t
+        self._train_val = train_val
         self._train_u = train_u
         self._val = val
         self._test = test
@@ -66,6 +75,14 @@ class DatasetBase:
     @property
     def train_x(self):
         return self._train_x
+
+    @property
+    def train_t(self):
+        return self._train_t
+
+    @property
+    def train_val(self):
+        return self._train_val
 
     @property
     def train_u(self):
@@ -237,7 +254,6 @@ class DatasetWrapper(Dataset):
     def __init__(
         self,
         data_source,
-        input_size,
         transform=None,
         is_train=False,
         return_img0=False,

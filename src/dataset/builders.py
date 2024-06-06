@@ -50,7 +50,6 @@ def build_transform(
 def build_data_loader(
     data_source=None,
     batch_size=64,
-    input_size=224,
     tfm=None,
     is_train=True,
     shuffle=False,
@@ -62,9 +61,7 @@ def build_data_loader(
 
     # Build data loader
     data_loader = torch.utils.data.DataLoader(
-        dataset_wrapper(
-            data_source, input_size=input_size, transform=tfm, is_train=is_train
-        ),
+        dataset_wrapper(data_source, transform=tfm, is_train=is_train),
         batch_size=batch_size,
         num_workers=0,
         shuffle=shuffle,
