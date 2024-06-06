@@ -4,7 +4,13 @@ import numpy as np
 import torch
 
 # import utils and datasets
-from src.api.utils import Logger, save_pickle, load_pickle, compute_confidence_interval
+from src.logger import Logger
+from src.api.utils import (
+    wrap_tqdm,
+    save_pickle,
+    load_pickle,
+    compute_confidence_interval,
+)
 from src.api.task_generator_few_shot import Task_Generator_Few_shot
 from src.api.sampler_few_shot import (
     CategoriesSampler_few_shot,
@@ -14,7 +20,7 @@ from src.api.sampler_few_shot import (
 )
 from src.dataset import DATASET_LIST
 from src.dataset import build_data_loader
-from src.methods import RobustPaddle_GD
+from src.methods import RobustPaddle_GD, Paddle, Paddle_GD
 
 
 class Evaluator_few_shot:
@@ -152,6 +158,24 @@ class Evaluator_few_shot:
 
         return extracted_features_dic_support, extracted_features_dic_query
 
+    def update_labels(self, labels_support, labels_query):
+        """
+        Maps the labels in the support set to labels in [0, ..., self.n_class -1]
+        and the labels in the query set to labels in [0, ..., self.n_class -1]"""
+
+        unique_labels = np.unique(labels_support)
+        assert self.args.n_class == len(unique_labels)
+        mapping = {label: i for i, label in enumerate(unique_labels)}
+        inverse_mapping = {i: label for i, label in enumerate(unique_labels)}
+        self.mapping = mapping
+        self.inverse_mapping = inverse_mapping
+        labels_support = torch.tensor(
+            [mapping[label.item()] for label in labels_support]
+        )
+        labels_query = torch.tensor([mapping[label.item()] for label in labels_query])
+
+        return labels_support, labels_query
+
     def run_full_evaluation(self, backbone, preprocess):
         """
         Run the full evaluation process over all tasks.
@@ -177,17 +201,19 @@ class Evaluator_few_shot:
         features_query = extracted_features_dic_query["features"]
         labels_query = extracted_features_dic_query["labels"]
 
+        labels_support, labels_query = self.update_labels(labels_support, labels_query)
+
         # Run evaluation for each task and collect results
-        mean_accuracies, mean_times = self.evaluate_tasks(
+        mean_accuracies, mean_times, mean_criterions = self.evaluate_tasks(
             backbone, features_support, labels_support, features_query, labels_query
         )
 
-        self.report_results(mean_accuracies, mean_times)
+        self.report_results(mean_accuracies, mean_times, mean_criterions)
 
-    def get_method_builder(self, model, device, args, log_file):
+    def get_method_builder(self, backbone, device, args, log_file):
         # Initialize method classifier builder
         method_info = {
-            "model": model,
+            "backbone": backbone,
             "device": device,
             "log_file": log_file,
             "args": args,
@@ -196,6 +222,10 @@ class Evaluator_few_shot:
         # few-shot methods
         if args.name_method == "RPADDLE":
             method_builder = RobustPaddle_GD(**method_info)
+        if args.name_method == "PADDLE":
+            method_builder = Paddle(**method_info)
+        if args.name_method == "PADDLE_GD":
+            method_builder = Paddle_GD(**method_info)
 
         else:
             raise ValueError(
@@ -248,7 +278,7 @@ class Evaluator_few_shot:
 
         # if no outliers to be added, return the original features and labels
         if (self.args.n_outliers) == 0:
-            return new_features, new_labels
+            return new_features, new_labels, []
 
         # Else chooses random indices and apply transformations
         indices_outliers = indices[
@@ -287,9 +317,13 @@ class Evaluator_few_shot:
         results_time = []
         results_task = []
         results_task_time = []
+        results_criterion = []
 
         # Evaluation over each task
-        for i in range(int(self.args.number_tasks / self.args.batch_size)):
+        for i in wrap_tqdm(
+            range(int(self.args.number_tasks / self.args.batch_size)),
+            disable_tqdm=False,
+        ):
 
             # Samplers
             sampler = CategoriesSampler_few_shot(
@@ -361,14 +395,16 @@ class Evaluator_few_shot:
             timestamps, criterions = logs["timestamps"], logs["criterions"]
             results_task.append(acc_mean)
             results_task_time.append(timestamps)
+            results_criterion.append(criterions)
 
             del method
             del tasks
 
         mean_accuracies = np.mean(np.asarray(results_task))
         mean_times = np.mean(np.asarray(results_task_time))
+        mean_criterions = np.mean(np.asarray(results_criterion))
 
-        return mean_accuracies, mean_times
+        return mean_accuracies, mean_times, mean_criterions
 
     def get_method_val_param(self):
         # fixes for each method the name of the parameter on which validation is performed
@@ -376,7 +412,7 @@ class Evaluator_few_shot:
             self.val_param = self.args.lambd
 
     # TODO : implement it
-    def report_results(self, mean_accuracies, mean_times):
+    def report_results(self, mean_accuracies, mean_times, mean_criterions):
         """
         Reports the results of the evaluation
 
@@ -454,6 +490,11 @@ class Evaluator_few_shot:
                     self.args.shots, self.args.number_tasks, mean_times
                 )
             )
+            self.logger.info(
+                "{}-shot mean criterion over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_criterions
+                )
+            )
             f.write(str(var) + "\t")
             f.write(str(round(100 * mean_accuracies, 1)) + "\t")
             f.write("\n")
@@ -468,5 +509,10 @@ class Evaluator_few_shot:
             self.logger.info(
                 "{}-shot mean time over {} tasks: {}".format(
                     self.args.shots, self.args.number_tasks, mean_times
+                )
+            )
+            self.logger.info(
+                "{}-shot mean criterion over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_criterions
                 )
             )
