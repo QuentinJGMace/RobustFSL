@@ -5,6 +5,10 @@ logs/
 test_notebooks/
 checkpoints
 data
+.log/
+wandb/
+results_few_shot/
+*.ipynb
 
 .pre-commit-config.yaml
 

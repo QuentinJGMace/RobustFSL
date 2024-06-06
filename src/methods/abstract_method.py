@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from src.api.utils import get_one_hot, Logger
+from src.methods.utils import get_one_hot
+from src.logger import Logger
 import numpy as np
 import tqdm
 
