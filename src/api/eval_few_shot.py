@@ -222,9 +222,9 @@ class Evaluator_few_shot:
         # few-shot methods
         if args.name_method == "RPADDLE":
             method_builder = RobustPaddle_GD(**method_info)
-        if args.name_method == "PADDLE":
+        elif args.name_method == "PADDLE":
             method_builder = Paddle(**method_info)
-        if args.name_method == "PADDLE_GD":
+        elif args.name_method == "PADDLE_GD":
             method_builder = Paddle_GD(**method_info)
 
         else:
@@ -271,23 +271,29 @@ class Evaluator_few_shot:
             new_labels : Labels with outliers.
             indices_outliers : Indices of the outliers.
         """
-
-        # original version that we will modify
-        new_features = all_features[indices].clone()
-        new_labels = all_labels[indices].clone()
-
         # if no outliers to be added, return the original features and labels
         if (self.args.n_outliers) == 0:
-            return new_features, new_labels, []
+            return all_features[indices].clone(), all_labels[indices].clone(), []
 
         # Else chooses random indices and apply transformations
-        indices_outliers = indices[
-            torch.randint(0, len(all_features), (self.args.n_outliers,))
-        ]
-        for i in indices_outliers:
 
-            multiplier = torch.abs(torch.randn(1)) * self.args.outlier_level
-            new_features[i] = multiplier * new_features[i]
+        # init new tensors
+        new_features = torch.zeros_like(all_features[indices])
+        new_labels = all_labels[indices].clone()
+
+        # Select random indices
+        perm = torch.randperm(len(indices))
+        indices_outliers = indices[perm][: self.args.n_outliers]
+
+        # Mask for torch magic to optimize runtime
+        mask_outliers = torch.zeros(len(indices), dtype=torch.bool)
+        mask_outliers[perm[: self.args.n_outliers]] = True
+
+        # Replace the outliers with random vectors
+        new_features[mask_outliers] = torch.randn_like(
+            all_features[indices[mask_outliers]]
+        )
+        new_features[~mask_outliers] = all_features[indices[~mask_outliers]]
 
         return new_features, new_labels, indices_outliers
 
