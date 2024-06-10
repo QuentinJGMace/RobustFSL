@@ -5,7 +5,8 @@ import time
 import numpy as np
 from tqdm import tqdm
 
-from .abstract_method import AbstractMethod, MinMaxScaler
+from src.methods.abstract_method import AbstractMethod, MinMaxScaler
+from src.methods.utils import get_one_hot
 
 
 class RobustPaddle_GD(AbstractMethod):
@@ -58,7 +59,7 @@ class RobustPaddle_GD(AbstractMethod):
             self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
         """
         n_tasks = support.size(0)
-        one_hot = self.get_one_hot(y_s)
+        one_hot = get_one_hot(y_s)
         counts = one_hot.sum(1).view(n_tasks, -1, 1)
         weights = one_hot.transpose(1, 2).matmul(support)
         self.prototypes = (weights / counts).to(
@@ -189,9 +190,9 @@ class RobustPaddle_GD(AbstractMethod):
         return matY
 
 
-class MultNoisePaddle(RobustPADDLE_GD):
+class MultNoisePaddle(RobustPaddle_GD):
     def __init__(self, backbone, device, log_file, args):
-        super(RobustPADDLE_GD, self).__init__(backbone, device, log_file, args)
+        super(RobustPaddle_GD, self).__init__(backbone, device, log_file, args)
 
         self.lambd = args.lambd
         self.lr = args.lr
@@ -236,7 +237,7 @@ class MultNoisePaddle(RobustPADDLE_GD):
             self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
         """
         n_tasks = support.size(0)
-        one_hot = self.get_one_hot(y_s)
+        one_hot = get_one_hot(y_s)
         counts = one_hot.sum(1).view(n_tasks, -1, 1)
         weights = one_hot.transpose(1, 2).matmul(support)
         self.prototypes = (weights / counts).to(

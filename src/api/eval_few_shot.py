@@ -4,21 +4,23 @@ import numpy as np
 import torch
 
 # import utils and datasets
-from src.api.utils import Logger, save_pickle, load_pickle, compute_confidence_interval
+from src.logger import Logger
+from src.api.utils import (
+    wrap_tqdm,
+    save_pickle,
+    load_pickle,
+    compute_confidence_interval,
+)
 from src.api.task_generator_few_shot import Task_Generator_Few_shot
 from src.api.sampler_few_shot import (
     CategoriesSampler_few_shot,
     SamplerSupport_few_shot,
     SamplerQuery_few_shot,
+    SamplerSupportAndQuery,
 )
-from src.dataset import MiniImageNet
+from src.dataset import DATASET_LIST
 from src.dataset import build_data_loader
-from src.methods import RobustPaddle
-
-# Dataset list for FSL tasks
-dataset_list = {
-    "miniimagenet": MiniImageNet,
-}
+from src.methods import RobustPaddle_GD, Paddle, Paddle_GD
 
 
 class Evaluator_few_shot:
@@ -156,6 +158,24 @@ class Evaluator_few_shot:
 
         return extracted_features_dic_support, extracted_features_dic_query
 
+    def update_labels(self, labels_support, labels_query):
+        """
+        Maps the labels in the support set to labels in [0, ..., self.n_class -1]
+        and the labels in the query set to labels in [0, ..., self.n_class -1]"""
+
+        unique_labels = np.unique(labels_support)
+        assert self.args.n_class == len(unique_labels)
+        mapping = {label: i for i, label in enumerate(unique_labels)}
+        inverse_mapping = {i: label for i, label in enumerate(unique_labels)}
+        self.mapping = mapping
+        self.inverse_mapping = inverse_mapping
+        labels_support = torch.tensor(
+            [mapping[label.item()] for label in labels_support]
+        )
+        labels_query = torch.tensor([mapping[label.item()] for label in labels_query])
+
+        return labels_support, labels_query
+
     def run_full_evaluation(self, backbone, preprocess):
         """
         Run the full evaluation process over all tasks.
@@ -164,10 +184,10 @@ class Evaluator_few_shot:
         :return: Mean accuracies of the evaluation.
         """
 
-        # backbone.eval()
+        backbone.eval()
 
         # Init dataset and data loaders
-        dataset = dataset_list[self.args.dataset](self.args.dataset_path)
+        dataset = DATASET_LIST[self.args.dataset](self.args.dataset_path)
         self.args.classnames = dataset.classnames
         data_loaders = self.initialize_data_loaders(dataset, preprocess)
 
@@ -181,17 +201,19 @@ class Evaluator_few_shot:
         features_query = extracted_features_dic_query["features"]
         labels_query = extracted_features_dic_query["labels"]
 
+        labels_support, labels_query = self.update_labels(labels_support, labels_query)
+
         # Run evaluation for each task and collect results
-        mean_accuracies, mean_times = self.evaluate_tasks(
+        mean_accuracies, mean_times, mean_criterions = self.evaluate_tasks(
             backbone, features_support, labels_support, features_query, labels_query
         )
 
-        self.report_results(mean_accuracies, mean_times)
+        self.report_results(mean_accuracies, mean_times, mean_criterions)
 
-    def get_method_builder(self, model, device, args, log_file):
+    def get_method_builder(self, backbone, device, args, log_file):
         # Initialize method classifier builder
         method_info = {
-            "model": model,
+            "backbone": backbone,
             "device": device,
             "log_file": log_file,
             "args": args,
@@ -199,7 +221,11 @@ class Evaluator_few_shot:
 
         # few-shot methods
         if args.name_method == "RPADDLE":
-            method_builder = RobustPaddle(**method_info)
+            method_builder = RobustPaddle_GD(**method_info)
+        elif args.name_method == "PADDLE":
+            method_builder = Paddle(**method_info)
+        elif args.name_method == "PADDLE_GD":
+            method_builder = Paddle_GD(**method_info)
 
         else:
             raise ValueError(
@@ -214,12 +240,62 @@ class Evaluator_few_shot:
         raise NotImplementedError("Optimal parameter setting not implemented yet")
 
     def check_intersection(self, indices_support, indices_query):
+        """
+        Check if there is an intersection between the support and query set indices
+
+        Args :
+            indices_support : Indices of the support set
+            indices_query : Indices of the query set
+
+        Returns :
+            True if there is an intersection, False otherwise
+        """
         for i, indices in enumerate(indices_support):
             for indice in indices:
                 if indice in indices_query[i]:
-                    raise ValueError(
-                        "Support and query sets have data points in common"
-                    )
+                    return True
+        return False
+
+    # TODO : improve, add feature from completely different image, switch labels
+    def generate_outliers(self, all_features, all_labels, indices):
+        """
+        Randomly generates outliers for the given features and labels.
+
+        Args:
+            all_features : Extracted features for the dataset.
+            all_labels : Labels for the dataset.
+            indices : Indices of the data points that will be taken into the set
+
+        Returns:
+            new_features : Features with outliers.
+            new_labels : Labels with outliers.
+            indices_outliers : Indices of the outliers.
+        """
+        # if no outliers to be added, return the original features and labels
+        if (self.args.n_outliers) == 0:
+            return all_features[indices].clone(), all_labels[indices].clone(), []
+
+        # Else chooses random indices and apply transformations
+
+        # init new tensors
+        new_features = torch.zeros_like(all_features[indices])
+        new_labels = all_labels[indices].clone()
+
+        # Select random indices
+        perm = torch.randperm(len(indices))
+        indices_outliers = indices[perm][: self.args.n_outliers]
+
+        # Mask for torch magic to optimize runtime
+        mask_outliers = torch.zeros(len(indices), dtype=torch.bool)
+        mask_outliers[perm[: self.args.n_outliers]] = True
+
+        # Replace the outliers with random vectors
+        new_features[mask_outliers] = torch.randn_like(
+            all_features[indices[mask_outliers]]
+        )
+        new_features[~mask_outliers] = all_features[indices[~mask_outliers]]
+
+        return new_features, new_labels, indices_outliers
 
     def evaluate_tasks(
         self, backbone, features_support, labels_support, features_query, labels_query
@@ -247,9 +323,13 @@ class Evaluator_few_shot:
         results_time = []
         results_task = []
         results_task_time = []
+        results_criterion = []
 
         # Evaluation over each task
-        for i in range(int(self.args.number_tasks / self.args.batch_size)):
+        for i in wrap_tqdm(
+            range(int(self.args.number_tasks / self.args.batch_size)),
+            disable_tqdm=False,
+        ):
 
             # Samplers
             sampler = CategoriesSampler_few_shot(
@@ -262,62 +342,75 @@ class Evaluator_few_shot:
             )
             sampler.create_list_classes(labels_support, labels_query)
 
-            sampler_support = SamplerSupport_few_shot(sampler)
-            sampler_query = SamplerQuery_few_shot(sampler)
+            sampler_support_query = SamplerSupportAndQuery(sampler)
 
-            # TODO : I think it is buggy,
-            # the support and query sets could have data points in common
-            # Get query and support samples
-            test_loader_query = []
-            indices_support, indices_query = [], []
-            for indices in sampler_query:
-                test_loader_query.append(
-                    (features_query[indices, :], labels_query[indices])
+            test_loader_query, test_loader_support = [], []
+            list_indices_support, list_indices_query = [], []
+            list_indices_outlier_support, list_indices_outlier_query = [], []
+
+            for indices_support, indices_query in sampler_support_query:
+                (
+                    new_features_s,
+                    new_labels_s,
+                    indices_outliers_s,
+                ) = self.generate_outliers(
+                    features_support, labels_support, indices_support
                 )
-                indices_query.append(indices)
+                test_loader_support.append((new_features_s, new_labels_s))
+                (
+                    new_features_q,
+                    new_labels_q,
+                    indices_outliers_q,
+                ) = self.generate_outliers(features_query, labels_query, indices_query)
+                test_loader_query.append((new_features_q, new_labels_q))
+                list_indices_query.append(indices_query)
+                list_indices_support.append(indices_support)
+                list_indices_outlier_query.append(indices_outliers_q)
+                list_indices_outlier_support.append(indices_outliers_s)
 
-            test_loader_support = []
-            for indices in sampler_support:
-                test_loader_support.append(
-                    (features_support[indices, :], labels_support[indices])
-                )
-                indices_support.append(indices)
+            assert not self.check_intersection(list_indices_support, list_indices_query)
 
-            self.check_intersection(indices_support, indices_query)
+            # Prepare the tasks
+            task_generator = Task_Generator_Few_shot(
+                k_eff=self.args.k_eff,
+                shot=self.args.shots,
+                n_query=self.args.n_query,
+                n_class=self.args.n_class,
+                loader_support=test_loader_support,
+                loader_query=test_loader_query,
+                backbone=backbone,
+                args=self.args,
+            )
 
-        #     # Prepare the tasks
-        #     task_generator = Task_Generator_Few_shot(
-        #         k_eff=self.args.k_eff, shot=self.args.shots, n_query=self.args.n_query, n_class=self.args.n_class, loader_support=test_loader_support, loader_query=test_loader_query, backbone=backbone, args = self.args
-        #     )
+            tasks = task_generator.generate_tasks()
 
-        #     tasks = task_generator.generate_tasks()
+            # Load the method
+            method = self.get_method_builder(
+                backbone=backbone,
+                device=self.device,
+                args=self.args,
+                log_file=self.log_file,
+            )
+            # set the optimal parameter for the method if the test set is used
+            if self.args.used_test_set == "test" and self.args.tunable:
+                self.set_method_opt_param()
 
-        #     # Load the method
-        #     method = self.get_method_builder(
-        #         backbone=backbone, device=self.device, args=self.args, log_file = self.log_file
-        #     )
-        #     # set the optimal parameter for the method if the test set is used
-        #     if self.args.used_test_set == 'test' and self.args.tunable:
-        #         self.set_method_opt_param()
+            # Run task
+            logs = method.run_task(task_dic=tasks, shot=self.args.shots)
+            acc_mean, acc_conf = compute_confidence_interval(logs["acc"][:, -1])
+            timestamps, criterions = logs["timestamps"], logs["criterions"]
+            results_task.append(acc_mean)
+            results_task_time.append(timestamps)
+            results_criterion.append(criterions)
 
-        #     # Run task
-        #     logs = method.run_task(task_dic=tasks, shot=self.args.shots)
-        #     acc_mean, acc_conf = compute_confidence_interval(
-        #         logs['acc'][:, -1]
-        #     )
-        #     timestamps, criterions = logs["timestamps"], logs["criterions"]
-        #     results_task.append(acc_mean)
-        #     results_task_time.append(timestamps)
+            del method
+            del tasks
 
-        #     del method
-        #     del tasks
+        mean_accuracies = np.mean(np.asarray(results_task))
+        mean_times = np.mean(np.asarray(results_task_time))
+        mean_criterions = np.mean(np.asarray(results_criterion))
 
-        # mean_accuracies = np.mean(np.asarray(results_task))
-        # mean_times = np.mean(np.asarray(results_task_time))
-
-        return 1 / 0
-
-        return mean_accuracies, mean_times
+        return mean_accuracies, mean_times, mean_criterions
 
     def get_method_val_param(self):
         # fixes for each method the name of the parameter on which validation is performed
@@ -325,7 +418,7 @@ class Evaluator_few_shot:
             self.val_param = self.args.lambd
 
     # TODO : implement it
-    def report_results(self, mean_accuracies, mean_times):
+    def report_results(self, mean_accuracies, mean_times, mean_criterions):
         """
         Reports the results of the evaluation
 
@@ -403,6 +496,11 @@ class Evaluator_few_shot:
                     self.args.shots, self.args.number_tasks, mean_times
                 )
             )
+            self.logger.info(
+                "{}-shot mean criterion over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_criterions
+                )
+            )
             f.write(str(var) + "\t")
             f.write(str(round(100 * mean_accuracies, 1)) + "\t")
             f.write("\n")
@@ -417,5 +515,10 @@ class Evaluator_few_shot:
             self.logger.info(
                 "{}-shot mean time over {} tasks: {}".format(
                     self.args.shots, self.args.number_tasks, mean_times
+                )
+            )
+            self.logger.info(
+                "{}-shot mean criterion over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_criterions
                 )
             )

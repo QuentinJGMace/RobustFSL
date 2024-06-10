@@ -2,7 +2,8 @@ import os
 import csv
 
 import torchvision.transforms as transforms
-from .utils import Datum, DatasetBase, read_json
+from src.dataset.utils import read_json
+from src.dataset.base_classes import Datum, DatasetBase
 
 imagenet_classes = [
     "tench",

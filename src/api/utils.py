@@ -1,4 +1,6 @@
+import argparse
 import torch
+import wandb
 import numpy as np
 import shutil
 from tqdm import tqdm
@@ -12,16 +14,6 @@ from ast import literal_eval
 import logging
 import copy
 from scipy.optimize import linear_sum_assignment
-
-
-def get_one_hot(y_s, n_class):
-
-    eye = torch.eye(n_class).to(y_s.device)
-    one_hot = []
-    for y_task in y_s:
-        one_hot.append(eye[y_task].unsqueeze(0))
-    one_hot = torch.cat(one_hot, dim=0)
-    return one_hot
 
 
 def compute_confidence_interval(data, axis=0):
@@ -120,7 +112,7 @@ def _check_and_coerce_cfg_value_type(replacement, original, key, full_key):
     except Exception:
         pass
 
-    for (from_type, to_type) in casts:
+    for from_type, to_type in casts:
         converted, converted_value = conditional_cast(from_type, to_type)
         if converted:
             return converted_value
@@ -168,76 +160,6 @@ def merge_cfg_from_list(cfg: CfgNode, cfg_list: List[str]):
     return new_cfg
 
 
-class Logger:
-    def __init__(self, module_name, filename):
-        self.module_name = module_name
-        self.filename = filename
-        self.formatter = self.get_formatter()
-        self.file_handler = self.get_file_handler()
-        self.stream_handler = self.get_stream_handler()
-        self.logger = self.get_logger()
-
-    def get_formatter(self):
-        log_format = "[%(name)s]: [%(levelname)s]: %(message)s"
-        formatter = logging.Formatter(log_format)
-        return formatter
-
-    def get_file_handler(self):
-        file_handler = logging.FileHandler(self.filename)
-        file_handler.setFormatter(self.formatter)
-        return file_handler
-
-    def get_stream_handler(self):
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(self.formatter)
-        return stream_handler
-
-    def get_logger(self):
-        logger = logging.getLogger(self.module_name)
-        logger.setLevel(logging.INFO)
-        logger.addHandler(self.file_handler)
-        logger.addHandler(self.stream_handler)
-        return logger
-
-    def del_logger(self):
-        handlers = self.logger.handlers[:]
-        for handler in handlers:
-            handler.close()
-            self.logger.removeHandler(handler)
-
-    def info(self, msg):
-        self.logger.info(msg)
-
-    def debug(self, msg):
-        self.logger.debug(msg)
-
-    def warning(self, msg):
-        self.logger.warning(msg)
-
-    def critical(self, msg):
-        self.logger.critical(msg)
-
-    def exception(self, msg):
-        self.logger.exception(msg)
-
-
-def make_log_dir(log_path, dataset, method):
-    log_dir = os.path.join(log_path, dataset, method)
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
-    return log_dir
-
-
-def get_log_file(log_path, dataset, method):
-    log_dir = make_log_dir(log_path=log_path, dataset=dataset, method=method)
-    i = 0
-    filename = os.path.join(log_dir, "{}_run_{}.log".format(method, i))
-    while os.path.exists(os.path.join(log_dir, "{}_run_%s.log".format(method)) % i):
-        i += 1
-        filename = os.path.join(log_dir, "{}_run_{}.log".format(method, i))
-    return filename
-
-
 def save_pickle(file, data):
     with open(file, "wb") as f:
         pickle.dump(data, f)
@@ -246,56 +168,6 @@ def save_pickle(file, data):
 def load_pickle(file):
     with open(file, "rb") as f:
         return pickle.load(f)
-
-
-def extract_features(backbone, dataset, loader, set_name, args, device):
-    """
-    inputs:
-        backbone : The loaded model containing the feature extractor
-        train_loader : Train data loader
-        args : arguments
-        device : GPU device
-
-    returns :
-        Saves the features in data/args.dataset/saved_features/ under the name
-        '{}_visual_{}.plk'.format(set_name, args.backbone)
-    """
-
-    # Check if features are already saved
-    features_save_path = "data/{}/saved_features/{}_visual_{}.plk".format(
-        args.dataset, set_name, args.backbone
-    )
-    if os.path.exists(features_save_path):
-        print("Features already saved for {} set, skipping".format(set_name))
-    else:
-        print("Extracting {} features on {}".format(set_name, args.dataset))
-
-        # Extract features and labels
-        for i, (images, labels) in enumerate(tqdm(loader)):
-
-            # for images, labels in loader:
-            images = images.to(device)
-            labels = labels.to(device)
-            with torch.no_grad():
-                features = backbone(images, feature=True).float()
-                features /= features.norm(dim=-1, keepdim=True)  # Normalise features
-                if i == 0:
-                    all_features = features
-                    all_labels = labels.cpu()
-                else:
-                    all_features = torch.cat((all_features, features), dim=0)
-                    all_labels = torch.cat((all_labels, labels.cpu()), dim=0)
-
-        # Save features
-        extracted_features_dic = {
-            "concat_features": all_features,
-            "concat_labels": all_labels,
-        }
-        try:
-            os.mkdir("data/{}/saved_features/".format(args.dataset))
-        except:
-            pass
-        save_pickle(features_save_path, extracted_features_dic)
 
 
 def get_metric(metric_type):
@@ -338,3 +210,36 @@ def wrap_tqdm(data_loader, disable_tqdm):
     else:
         tqdm_loader = tqdm(data_loader, total=len(data_loader))
     return tqdm_loader
+
+
+def init_wandb(args):
+    # start a new wandb run to track this script
+    resume = "allow" if args.resume else "never"
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="RFSL",
+        # track hyperparameters and run metadata
+        config=args,
+        id=args.name,
+        name=args.name,
+        resume=resume,
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Main")
+    cfg = load_cfg_from_cfg_file("config/main_config.yaml")
+    parser.add_argument("--opts", default=None, nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    if args.opts is not None:
+        cfg = merge_cfg_from_list(cfg, args.opts)
+    dataset_config = "config/datasets_config/config_{}.yaml".format(cfg.dataset)
+    method_config = "config/methods_config/{}.yaml".format(cfg.method)
+    backbone_config = "config/backbones_config/{}.yaml".format(cfg.backbone)
+    cfg.update(load_cfg_from_cfg_file(dataset_config))
+    cfg.update(load_cfg_from_cfg_file(method_config))
+    cfg.update(load_cfg_from_cfg_file(backbone_config))
+    if args.opts is not None:
+        cfg = merge_cfg_from_list(cfg, args.opts)
+    cfg.n_class = cfg.num_classes_test
+    return cfg

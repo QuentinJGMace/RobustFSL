@@ -4,7 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from .abstract_method import AbstractMethod
+from src.methods.abstract_method import AbstractMethod
+from src.methods.utils import get_one_hot
 
 
 class RobustTIM(AbstractMethod):
@@ -66,7 +67,7 @@ class RobustTIM(AbstractMethod):
             self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
         """
         n_tasks = support.size(0)
-        one_hot = self.get_one_hot(y_s)
+        one_hot = get_one_hot(y_s)
         counts = one_hot.sum(1).view(n_tasks, -1, 1)
         weights = one_hot.transpose(1, 2).matmul(support)
         self.prototypes = (

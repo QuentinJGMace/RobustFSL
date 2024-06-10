@@ -3,7 +3,6 @@ import numpy as np
 
 
 class CategoriesSampler_few_shot:
-
     """
     CategorySampler
         inputs:
@@ -45,7 +44,7 @@ class CategoriesSampler_few_shot:
             m_ind_support : List of indexes where each class appears in the support set
             m_ind_query : List of indexes where each class appears in the query set
         """
-        label_support = np.array(label_support)  # all data label
+        label_support = np.array(label_support.cpu())  # all data label
         self.m_ind_support = []  # the data index of each class
         for i in range(max(label_support) + 1):
             # all data index of this class
@@ -53,7 +52,9 @@ class CategoriesSampler_few_shot:
             ind = torch.from_numpy(ind)
             self.m_ind_support.append(ind)
 
-        label_query = np.array(label_query)  # all data label
+        label_query = np.array(label_query.cpu())  # all data label
+        assert (label_support == label_query).all()
+        # print(max(label_support), min(label_support), len(np.unique(label_support)))
         self.m_ind_query = []  # the data index of each class
         for i in range(max(label_support) + 1):
             # all data index of this class
@@ -127,3 +128,76 @@ class SamplerQuery_few_shot:
 
                 query_size = len(query)
             yield query
+
+
+class SamplerSupportAndQuery:
+    def __init__(self, cat_sampler):
+        self.name = "SamplerSupportAndQuery"
+        self.list_classes = cat_sampler.list_classes
+        self.n_batch = cat_sampler.n_batch
+        self.k_eff = cat_sampler.k_eff
+        self.s_shot = cat_sampler.s_shot
+        self.m_ind_support = cat_sampler.m_ind_support
+        self.m_ind_query = cat_sampler.m_ind_query
+        self.n_query = cat_sampler.n_query
+        self.force_query_size = cat_sampler.force_query_size
+
+    def __len__(self):
+        return self.n_batch
+
+    def intersection(self, indices_support, indices_query):
+        """
+        Returns True iff there is an intersection between the support and query sets
+
+        Args:
+            indices_support : List of indexes of the support set
+            indices_query : List of indexes of the query set
+        Returns:
+            is_intersection : Boolean
+        """
+        intersection = False
+        for i in indices_support:
+            if i in indices_query:
+                intersection = True
+                break
+        return intersection
+
+    def __iter__(self):
+        for _ in range(self.n_batch):
+
+            # Generating query set
+            query_size = 0
+            n_trials = 0
+
+            while query_size < self.n_query and n_trials < 1:
+                classes = [
+                    self.list_classes[i]
+                    for i in torch.randperm(len(self.list_classes))[
+                        : self.k_eff
+                    ].tolist()
+                ]
+                query = []
+
+                complete_possible_samples = torch.cat(
+                    [self.m_ind_query[c] for c in classes], dim=0
+                )
+                pos = torch.randperm(complete_possible_samples.size(0))[: self.n_query]
+                query = complete_possible_samples[pos]
+
+                if self.force_query_size == False:
+                    n_trials += 1
+
+                query_size = len(query)
+
+            # Generating support set
+            support = []
+            counter = 0
+            while counter == 0 or self.intersection(support, query):
+                counter += 1
+                support = []
+                for c in self.list_classes:
+                    l = self.m_ind_support[c]
+                    pos = torch.randperm(l.size(0))
+                    support.append(l[pos[: self.s_shot]])
+                support = torch.cat(support)
+            yield (support, query)
