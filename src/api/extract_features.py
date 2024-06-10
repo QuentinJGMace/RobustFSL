@@ -37,14 +37,14 @@ def extract_features(args, backbone, data_loader, set_name, device, disable_tqdm
     labels = []
 
     all_features, all_labels = None, None
+    backbone.eval()
 
-    for i, (data, target) in enumerate(
-        wrap_tqdm(data_loader, disable_tqdm=disable_tqdm)
-    ):
-        data = data.to(device)
-        with torch.no_grad():
+    with torch.no_grad():
+        for i, (data, target) in enumerate(
+            wrap_tqdm(data_loader, disable_tqdm=disable_tqdm)
+        ):
+            data = data.to(device)
             features, _ = backbone(data, feature=True)
-            features /= features.norm(dim=-1, keepdim=True)
 
             if i == 0:
                 all_features = features
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     )
     backbone = get_backbone(args).to(device)
     checkpoint_path = args.ckpt_path
-
+    print(checkpoint_path)
     load_checkpoint(backbone, checkpoint_path, device, type="best")
 
     if not os.path.exists(
