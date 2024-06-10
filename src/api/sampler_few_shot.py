@@ -178,13 +178,9 @@ class SamplerSupportAndQuery:
                 ]
                 query = []
 
-                complete_possible_samples = self.m_ind_query[classes[0]]
-
-                for c in classes[1:]:
-                    complete_possible_samples = torch.cat(
-                        (complete_possible_samples, self.m_ind_query[c]), 0
-                    )
-                # print("all_possible_samples", complete_possible_samples)
+                complete_possible_samples = torch.cat(
+                    [self.m_ind_query[c] for c in classes], dim=0
+                )
                 pos = torch.randperm(complete_possible_samples.size(0))[: self.n_query]
                 query = complete_possible_samples[pos]
 
