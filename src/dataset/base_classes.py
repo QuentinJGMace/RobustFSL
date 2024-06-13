@@ -63,8 +63,6 @@ class DatasetBase:
         classnames=None,
     ):
         self._train_x = train_x
-        self._train_t = train_t
-        self._train_val = train_val
         self._train_u = train_u
         self._val = val
         self._test = test
@@ -75,14 +73,6 @@ class DatasetBase:
     @property
     def train_x(self):
         return self._train_x
-
-    @property
-    def train_t(self):
-        return self._train_t
-
-    @property
-    def train_val(self):
-        return self._train_val
 
     @property
     def train_u(self):

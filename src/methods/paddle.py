@@ -68,14 +68,9 @@ class KM(object):
         inputs:
             y_q : torch.Tensor of shape [n_task, n_query] :
         """
-        # print(self.u.shape)
         preds_q = self.u.argmax(2)
-        print(preds_q)
-        # print(y_q)
-        # print(y_q.shape)
         accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
         self.test_acc.append(accuracy)
-        # 1/0
 
     def get_logs(self):
 

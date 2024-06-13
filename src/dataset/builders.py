@@ -68,7 +68,6 @@ def build_data_loader(
         drop_last=False,
         pin_memory=(torch.cuda.is_available()),
     )
-    print(data_loader)
     assert len(data_loader) > 0
 
     return data_loader

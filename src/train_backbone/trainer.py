@@ -3,7 +3,8 @@ import wandb
 import time
 import torch.nn as nn
 import numpy as np
-from src.api.utils import wrap_tqdm, get_metric, AverageMeter
+from src.api.utils import wrap_tqdm
+from src.api.metric_utils import get_metric, AverageMeter
 from src.dataset import build_data_loader, DATASET_LIST
 from src.api.sampler_few_shot import CategoriesSampler_few_shot
 
@@ -14,21 +15,19 @@ class Trainer:
         self.args = args
         dataset = DATASET_LIST[args.dataset](self.args.dataset_path)
         self.train_loader = build_data_loader(
-            data_source=dataset.train_t,
+            data_source=dataset.train,
             batch_size=args.trainer_batch_size,
             is_train=True,
             shuffle=True,
             tfm=preprocess,
         )
         self.val_loader = build_data_loader(
-            data_source=dataset.train_val,
+            data_source=dataset.val,
             batch_size=args.trainer_batch_size,
             is_train=False,
             shuffle=True,
             tfm=preprocess,
         )
-        # self.train_loader = loaders["train"]
-        # self.val_loader = loaders["val"]
         self.device = device
         self.num_classes_train = self.args.num_classes_train
 

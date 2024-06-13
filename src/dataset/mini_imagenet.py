@@ -1013,12 +1013,10 @@ imagenet_classes = [
 
 class MiniImageNet(DatasetBase):
     def __init__(self, root):
-        print("path", os.path.join(root, "idx_class_name.csv"))
         with open(os.path.join(root, "idx_class_name.csv"), mode="r") as infile:
             reader = csv.reader(infile, delimiter=",")
             classes_to_label = {rows[0]: int(rows[1]) for rows in reader}
 
-        print("path classname to human", os.path.join(root, "class_name_to_human.txt"))
         classes_to_human = {}
         with open(os.path.join(root, "class_name_to_human.txt"), "r") as f:
             lines = f.readlines()
@@ -1053,16 +1051,10 @@ class MiniImageNet(DatasetBase):
         )
 
         train = self.read_data(root, "train.csv", classes_to_label, "train")
-        random.shuffle(train)
-        prop = int(0.8 * len(train))
-        train_t = train[:prop]
-        train_val = train[prop:]
         val = self.read_data(root, "val.csv", classes_to_label, "val")
         test = self.read_data(root, "test.csv", classes_to_label, "test")
 
-        super().__init__(
-            train_x=train, train_t=train_t, train_val=train_val, val=val, test=test
-        )
+        super().__init__(train_x=train, val=val, test=test)
 
     def read_data(self, root, split_file, classes_to_label, split_name):
         filepath = os.path.join(root, split_file)
