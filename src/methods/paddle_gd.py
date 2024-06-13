@@ -4,21 +4,15 @@ from tqdm import tqdm
 import torch
 import time
 import numpy as np
-from src.methods.paddle import KM
+from src.methods.km import KM
 
 
 class Paddle_GD(KM):
     def __init__(self, backbone, device, log_file, args):
-        self.device = device
-        self.iter = args.iter
+        super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.lambd = args.lambd
         self.lr = args.lr
-        self.backbone = backbone
-        self.log_file = log_file
-        self.logger = Logger(__name__, self.log_file)
         self.init_info_lists()
-        self.n_class = args.n_class
-        self.criterions = []
 
     def run_method(self, support, query, y_s, y_q):
         """
@@ -47,7 +41,7 @@ class Paddle_GD(KM):
 
         all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
 
-        for i in tqdm(range(self.iter)):
+        for i in tqdm(range(self.n_iter)):
 
             w_old = self.w.detach()
             t0 = time.time()
@@ -78,9 +72,9 @@ class Paddle_GD(KM):
                 criterions = weight_diff
 
             t1 = time.time()
-            self.record_convergence(new_time=t1 - t0, criterions=criterions)
+            self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
-        self.record_info(y_q=y_q)
+        self.record_acc(y_q=y_q)
 
     def simplex_project(self, u: torch.Tensor, l=1.0):
         """
