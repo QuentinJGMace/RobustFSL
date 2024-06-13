@@ -12,7 +12,8 @@ class AbstractMethod(nn.Module):
     def __init__(self, backbone, device, log_file, args):
         super(AbstractMethod, self).__init__()
         self.device = device
-        self.n_iter = args.n_iter
+        self.n_iter = args.iter
+        self.n_class = args.n_class
         self.backbone = backbone
         self.log_file = log_file
         self.logger = Logger(__name__, self.log_file)
@@ -25,7 +26,9 @@ class AbstractMethod(nn.Module):
         """
         Initializes the lists for logging
         """
-        pass
+        self.timestamps = []
+        self.criterions = []
+        self.test_acc = []
 
     def record_convergence(self, timestamp, criterions):
         """
@@ -44,20 +47,6 @@ class AbstractMethod(nn.Module):
             acc : torch.Tensor of shape [n_task]
         """
         self.test_acc.append(acc)
-
-    def compute_accuracy(self, query, y_q):
-        """
-        Computes the accuracy of the model
-        inputs:
-            logits : torch.Tensor of shape [n_task, query, num_class]
-            y_q : torch.Tensor of shape [n_task, query]
-        outputs:
-            accuracy : float
-        """
-        logits = self.get_logits(query).detach()
-        preds = logits.argmax(2)
-        accuracy = (preds == y_q).float().mean(1, keepdim=True)
-        return accuracy
 
     def get_logs(self):
         """
@@ -94,6 +83,14 @@ class AbstractMethod(nn.Module):
             samples : torch.Tensor of shape [n_task, shot, feature_dim]
         outputs:
             logits : torch.Tensor of shape [n_task, shot, num_class]
+        """
+        pass
+
+    def predict(self):
+        """
+        Returns the predictions
+        outputs:
+            preds : torch.Tensor of shape [n_task, n_query]
         """
         pass
 
