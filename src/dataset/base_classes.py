@@ -136,28 +136,6 @@ class DatasetBase:
                     "but got [{}]".format(self.domains, domain)
                 )
 
-    def download_data(self, url, dst, from_gdrive=True):
-        if not os.path.exists(os.path.dirname(dst)):
-            os.makedirs(os.path.dirname(dst))
-
-        if from_gdrive:
-            gdown.download(url, dst, quiet=False)
-        else:
-            raise NotImplementedError
-
-        print("Extracting file ...")
-
-        try:
-            tar = tarfile.open(dst)
-            tar.extractall(path=os.path.dirname(dst))
-            tar.close()
-        except:
-            zip_ref = zipfile.ZipFile(dst, "r")
-            zip_ref.extractall(os.path.dirname(dst))
-            zip_ref.close()
-
-        print("File extracted to {}".format(os.path.dirname(dst)))
-
     def generate_fewshot_dataset(self, *data_sources, num_shots=-1, repeat=True):
         """Generate a few-shot dataset (typically for the training set).
 
