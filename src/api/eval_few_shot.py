@@ -9,26 +9,27 @@ from src.api.utils import (
     wrap_tqdm,
     save_pickle,
     load_pickle,
-    compute_confidence_interval,
 )
+from src.api.metric_utils import compute_confidence_interval
 from src.api.task_generator_few_shot import Task_Generator_Few_shot
 from src.api.sampler_few_shot import (
     CategoriesSampler_few_shot,
-    SamplerSupport_few_shot,
-    SamplerQuery_few_shot,
     SamplerSupportAndQuery,
 )
+from src.api.extract_features import extract_features
 from src.dataset import DATASET_LIST
 from src.dataset import build_data_loader
-from src.methods import RobustPaddle_GD, Paddle, Paddle_GD
+from src.methods import get_method_builder
 
 
 class Evaluator_few_shot:
-    def __init__(self, device, args, log_file):
+    def __init__(self, device, args, log_file, logger, disable_tqdm=False):
         self.device = device
         self.args = args
         self.log_file = log_file
-        self.logger = Logger(__name__, log_file)
+        self.logger = logger
+        # self.logger = Logger(__name__, log_file)
+        self.disable_tqdm = disable_tqdm
 
     def initialize_data_loaders(self, dataset, preprocess):
         """
@@ -71,51 +72,6 @@ class Evaluator_few_shot:
 
         return data_loaders
 
-    def extract_features(self, backbone, data_loader, set_name):
-        """
-        Extracts features for the given data loader and saves them.
-
-        Args:
-            backbone: The model to be evaluated.
-            data_loader: Data loader for the dataset.
-            set_name: Name of the set to be saved.
-        Returns:
-            None (saves the features on disk)
-        """
-        features = []
-        labels = []
-
-        all_features, all_labels = None, None
-
-        for i, (data, target) in enumerate(tqdm(data_loader)):
-            data = data.to(self.device)
-            with torch.no_grad():
-                features = backbone(data)
-                features /= features.norm(dim=-1, keepdim=True)
-
-                if i == 0:
-                    all_features = features
-                    all_labels = target.cpu()
-                else:
-                    all_features = torch.cat((all_features, features), dim=0)
-                    all_labels = torch.cat((all_labels, target.cpu()), dim=0)
-
-        try:
-            os.mkdir(f"data/{self.args.dataset}/saved_features/")
-        except:
-            pass
-
-        filepath = os.path.join(
-            f"data/{self.args.dataset}/saved_features/{set_name}_features_{self.args.backbone}.pkl"
-        )
-        save_pickle(
-            filepath,
-            {
-                "features": all_features,
-                "labels": all_labels,
-            },
-        )
-
     def extract_and_load_features(self, backbone, data_loaders):
         """
         Extracts and loads the features for evaluation
@@ -134,15 +90,15 @@ class Evaluator_few_shot:
         if not os.path.exists(
             f"data/{self.args.dataset}/saved_features/train_features_{self.args.backbone}.pkl"
         ):
-            self.extract_features(backbone, data_loaders["train"], "train")
+            extract_features(self.args, backbone, data_loaders["train"], "train")
         if not os.path.exists(
             f"data/{self.args.dataset}/saved_features/val_features_{self.args.backbone}.pkl"
         ):
-            self.extract_features(backbone, data_loaders["val"], "val")
+            extract_features(self.args, backbone, data_loaders["val"], "val")
         if not os.path.exists(
             f"data/{self.args.dataset}/saved_features/test_features_{self.args.backbone}.pkl"
         ):
-            self.extract_features(backbone, data_loaders["test"], "test")
+            extract_features(self.args, backbone, data_loaders["test"], "test")
 
         filepath_support = os.path.join(
             f"data/{self.args.dataset}/saved_features/{self.args.used_set_support}_features_{self.args.backbone}.pkl"
@@ -151,32 +107,12 @@ class Evaluator_few_shot:
             f"data/{self.args.dataset}/saved_features/{self.args.used_set_query}_features_{self.args.backbone}.pkl"
         )
 
-        print(filepath_support)
-        print(filepath_query)
         extracted_features_dic_support = load_pickle(filepath_support)
         extracted_features_dic_query = load_pickle(filepath_query)
 
         return extracted_features_dic_support, extracted_features_dic_query
 
-    def update_labels(self, labels_support, labels_query):
-        """
-        Maps the labels in the support set to labels in [0, ..., self.n_class -1]
-        and the labels in the query set to labels in [0, ..., self.n_class -1]"""
-
-        unique_labels = np.unique(labels_support)
-        assert self.args.n_class == len(unique_labels)
-        mapping = {label: i for i, label in enumerate(unique_labels)}
-        inverse_mapping = {i: label for i, label in enumerate(unique_labels)}
-        self.mapping = mapping
-        self.inverse_mapping = inverse_mapping
-        labels_support = torch.tensor(
-            [mapping[label.item()] for label in labels_support]
-        )
-        labels_query = torch.tensor([mapping[label.item()] for label in labels_query])
-
-        return labels_support, labels_query
-
-    def run_full_evaluation(self, backbone, preprocess):
+    def run_full_evaluation(self, backbone, preprocess, return_results=False):
         """
         Run the full evaluation process over all tasks.
         :param backbone: The model to be evaluated.
@@ -201,8 +137,6 @@ class Evaluator_few_shot:
         features_query = extracted_features_dic_query["features"]
         labels_query = extracted_features_dic_query["labels"]
 
-        labels_support, labels_query = self.update_labels(labels_support, labels_query)
-
         # Run evaluation for each task and collect results
         mean_accuracies, mean_times, mean_criterions = self.evaluate_tasks(
             backbone, features_support, labels_support, features_query, labels_query
@@ -210,28 +144,12 @@ class Evaluator_few_shot:
 
         self.report_results(mean_accuracies, mean_times, mean_criterions)
 
-    def get_method_builder(self, backbone, device, args, log_file):
-        # Initialize method classifier builder
-        method_info = {
-            "backbone": backbone,
-            "device": device,
-            "log_file": log_file,
-            "args": args,
-        }
-
-        # few-shot methods
-        if args.name_method == "RPADDLE":
-            method_builder = RobustPaddle_GD(**method_info)
-        elif args.name_method == "PADDLE":
-            method_builder = Paddle(**method_info)
-        elif args.name_method == "PADDLE_GD":
-            method_builder = Paddle_GD(**method_info)
-
-        else:
-            raise ValueError(
-                "The method your entered does not exist or is not a few-shot method. Please check the spelling"
-            )
-        return method_builder
+        if return_results:
+            return {
+                "mean_accuracies": mean_accuracies,
+                "mean_times": mean_times,
+                "mean_criterions": mean_criterions,
+            }
 
     def set_method_opt_param(self):
         """
@@ -239,25 +157,8 @@ class Evaluator_few_shot:
         """
         raise NotImplementedError("Optimal parameter setting not implemented yet")
 
-    def check_intersection(self, indices_support, indices_query):
-        """
-        Check if there is an intersection between the support and query set indices
-
-        Args :
-            indices_support : Indices of the support set
-            indices_query : Indices of the query set
-
-        Returns :
-            True if there is an intersection, False otherwise
-        """
-        for i, indices in enumerate(indices_support):
-            for indice in indices:
-                if indice in indices_query[i]:
-                    return True
-        return False
-
     # TODO : improve, add feature from completely different image, switch labels
-    def generate_outliers(self, all_features, all_labels, indices):
+    def generate_outliers(self, all_features, all_labels, indices, n_outliers=0):
         """
         Randomly generates outliers for the given features and labels.
 
@@ -272,7 +173,7 @@ class Evaluator_few_shot:
             indices_outliers : Indices of the outliers.
         """
         # if no outliers to be added, return the original features and labels
-        if (self.args.n_outliers) == 0:
+        if (n_outliers) == 0:
             return all_features[indices].clone(), all_labels[indices].clone(), []
 
         # Else chooses random indices and apply transformations
@@ -283,15 +184,23 @@ class Evaluator_few_shot:
 
         # Select random indices
         perm = torch.randperm(len(indices))
-        indices_outliers = indices[perm][: self.args.n_outliers]
+        indices_outliers = indices[perm][:n_outliers]
 
         # Mask for torch magic to optimize runtime
         mask_outliers = torch.zeros(len(indices), dtype=torch.bool)
-        mask_outliers[perm[: self.args.n_outliers]] = True
+        mask_outliers[perm[:n_outliers]] = True
 
         # Replace the outliers with random vectors
-        new_features[mask_outliers] = torch.randn_like(
-            all_features[indices[mask_outliers]]
+        # new_features[mask_outliers] = torch.randn_like(
+        #     all_features[indices[mask_outliers]]
+        # )
+        # new_features[mask_outliers] = torch.zeros_like(
+        #     all_features[indices[mask_outliers]]
+        # )
+        new_features[mask_outliers] = (
+            5
+            * torch.abs(torch.randn((n_outliers, 1), device=all_features.device))
+            * all_features[indices[mask_outliers]]
         )
         new_features[~mask_outliers] = all_features[indices[~mask_outliers]]
 
@@ -319,8 +228,6 @@ class Evaluator_few_shot:
             f"Running evaluation with method {self.args.name_method} on {self.args.dataset} dataset ({self.args.used_set_query} set)"
         )
 
-        results = []
-        results_time = []
         results_task = []
         results_task_time = []
         results_criterion = []
@@ -328,7 +235,7 @@ class Evaluator_few_shot:
         # Evaluation over each task
         for i in wrap_tqdm(
             range(int(self.args.number_tasks / self.args.batch_size)),
-            disable_tqdm=False,
+            disable_tqdm=self.disable_tqdm,
         ):
 
             # Samplers
@@ -354,21 +261,27 @@ class Evaluator_few_shot:
                     new_labels_s,
                     indices_outliers_s,
                 ) = self.generate_outliers(
-                    features_support, labels_support, indices_support
+                    features_support,
+                    labels_support,
+                    indices_support,
+                    self.args.n_outliers_support,
                 )
                 test_loader_support.append((new_features_s, new_labels_s))
                 (
                     new_features_q,
                     new_labels_q,
                     indices_outliers_q,
-                ) = self.generate_outliers(features_query, labels_query, indices_query)
+                ) = self.generate_outliers(
+                    features_query,
+                    labels_query,
+                    indices_query,
+                    self.args.n_outliers_query,
+                )
                 test_loader_query.append((new_features_q, new_labels_q))
                 list_indices_query.append(indices_query)
                 list_indices_support.append(indices_support)
                 list_indices_outlier_query.append(indices_outliers_q)
                 list_indices_outlier_support.append(indices_outliers_s)
-
-            assert not self.check_intersection(list_indices_support, list_indices_query)
 
             # Prepare the tasks
             task_generator = Task_Generator_Few_shot(
@@ -385,7 +298,7 @@ class Evaluator_few_shot:
             tasks = task_generator.generate_tasks()
 
             # Load the method
-            method = self.get_method_builder(
+            method = get_method_builder(
                 backbone=backbone,
                 device=self.device,
                 args=self.args,
@@ -417,7 +330,6 @@ class Evaluator_few_shot:
         if self.args.name_method == "RPADDLE":
             self.val_param = self.args.lambd
 
-    # TODO : implement it
     def report_results(self, mean_accuracies, mean_times, mean_criterions):
         """
         Reports the results of the evaluation
