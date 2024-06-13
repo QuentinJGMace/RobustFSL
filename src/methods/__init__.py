@@ -1,7 +1,7 @@
 from .rpaddle_gd import RobustPaddle_GD
 from .paddle import Paddle
 from .paddle_gd import Paddle_GD
-from .tim import TIM_GD
+from .tim import TIM_GD, Alpha_TIM
 
 
 def get_method_builder(backbone, device, args, log_file):
@@ -22,6 +22,8 @@ def get_method_builder(backbone, device, args, log_file):
         method_builder = Paddle_GD(**method_info)
     elif args.name_method == "TIM_GD":
         method_builder = TIM_GD(**method_info)
+    elif args.name_method == "ALPHA_TIM":
+        method_builder = Alpha_TIM(**method_info)
 
     else:
         raise ValueError(
