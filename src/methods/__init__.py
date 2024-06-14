@@ -1,4 +1,4 @@
-from .rpaddle_gd import RobustPaddle_GD
+from .rpaddle_gd_2 import MutlNoisePaddle_GD
 from .paddle import Paddle
 from .paddle_gd import Paddle_GD
 from .tim import TIM_GD, Alpha_TIM
@@ -15,7 +15,7 @@ def get_method_builder(backbone, device, args, log_file):
 
     # few-shot methods
     if args.name_method == "RPADDLE":
-        method_builder = RobustPaddle_GD(**method_info)
+        method_builder = MutlNoisePaddle_GD(**method_info)
     elif args.name_method == "PADDLE":
         method_builder = Paddle(**method_info)
     elif args.name_method == "PADDLE_GD":

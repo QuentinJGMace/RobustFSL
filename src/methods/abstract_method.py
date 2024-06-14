@@ -20,7 +20,8 @@ class AbstractMethod(nn.Module):
         self.args = args
 
     def __del__(self):
-        self.logger.del_logger()
+        if hasattr(self, "logger"):
+            self.logger.del_logger()
 
     def init_info_lists(self):
         """
@@ -40,13 +41,22 @@ class AbstractMethod(nn.Module):
         self.timestamps.append(timestamp)
         self.criterions.append(criterions)
 
-    def record_accuracy(self, acc):
+    def record_acc(self, y_q):
         """
-        Records the accuracy
         inputs:
-            acc : torch.Tensor of shape [n_task]
+            y_q : torch.Tensor of shape [n_task, n_query] :
         """
-        self.test_acc.append(acc)
+        preds_q = self.predict()
+        accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
+        self.test_acc.append(accuracy)
+
+    # def record_accuracy(self, acc):
+    #     """
+    #     Records the accuracy
+    #     inputs:
+    #         acc : torch.Tensor of shape [n_task]
+    #     """
+    #     self.test_acc.append(acc)
 
     def get_logs(self):
         """

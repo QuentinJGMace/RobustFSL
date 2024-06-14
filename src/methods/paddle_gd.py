@@ -1,10 +1,9 @@
 import torch.nn.functional as F
-from src.logger import Logger
 from tqdm import tqdm
 import torch
 import time
-import numpy as np
 from src.methods.km import KM
+from src.methods.utils import simplex_project
 
 
 class Paddle_GD(KM):
@@ -67,7 +66,7 @@ class Paddle_GD(KM):
 
             # Projection
             with torch.no_grad():
-                self.u = self.simplex_project(self.u)
+                self.u = simplex_project(self.u, device=self.device)
                 weight_diff = (w_old - self.w).norm(dim=-1).mean(-1)
                 criterions = weight_diff
 
@@ -75,36 +74,3 @@ class Paddle_GD(KM):
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.record_acc(y_q=y_q)
-
-    def simplex_project(self, u: torch.Tensor, l=1.0):
-        """
-        Taken from https://www.researchgate.net/publication/283568278_NumPy_SciPy_Recipes_for_Data_Science_Computing_Nearest_Neighbors
-        u: [n_tasks, n_q, K]
-        """
-
-        # Put in the right form for the function
-        matX = u.permute(0, 2, 1).detach().cpu().numpy()
-
-        # Core function
-        n_tasks, m, n = matX.shape
-        matS = -np.sort(-matX, axis=1)
-        matC = np.cumsum(matS, axis=1) - l
-        matH = matS - matC / (np.arange(m) + 1).reshape(1, m, 1)
-        matH[matH <= 0] = np.inf
-
-        r = np.argmin(matH, axis=1)
-        t = []
-        for task in range(n_tasks):
-            t.append(matC[task, r[task], np.arange(n)] / (r[task] + 1))
-        t = np.stack(t, 0)
-        matY = matX - t[:, None, :]
-        matY[matY < 0] = 0
-
-        # Back to torch
-        matY = torch.from_numpy(matY).permute(0, 2, 1).to(self.device)
-
-        assert torch.allclose(
-            matY.sum(-1), torch.ones_like(matY.sum(-1))
-        ), "Simplex constraint does not seem satisfied"
-
-        return matY
