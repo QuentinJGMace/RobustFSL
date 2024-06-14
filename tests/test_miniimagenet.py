@@ -1,9 +1,7 @@
 import pytest
-import os
-import random
 import torchvision.transforms as T
 from src.dataset.mini_imagenet import MiniImageNet
-from src.dataset.utils import build_data_loader
+from src.dataset.builders import build_data_loader
 
 
 # tests if the MiniImageNet loads correctly
