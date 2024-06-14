@@ -38,8 +38,8 @@ class CategoriesSampler_few_shot:
         Initialise the indexes where each class appears in the support and query sets
 
         Args :
-            label_support : List of labels of the support set
-            label_query : List of labels of the query set
+            label_support : Tensor of labels of the support set
+            label_query : Tensor of labels of the query set
         Updates:
             m_ind_support : List of indexes where each class appears in the support set
             m_ind_query : List of indexes where each class appears in the query set
