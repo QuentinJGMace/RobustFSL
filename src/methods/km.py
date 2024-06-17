@@ -1,6 +1,7 @@
 """
 Abstract class that is used for paddle type methods
 """
+
 import torch
 from src.methods.utils import get_one_hot
 from src.methods.abstract_method import AbstractMethod, MinMaxScaler

@@ -26,7 +26,7 @@ def get_optimizer(
     OPTIMIZER = {
         "SGD": torch.optim.SGD(
             backbone.parameters(),
-            lr=args.lr,
+            lr=args.lr_backbone,
             momentum=0.9,
             weight_decay=args.weight_decay,
             nesterov=args.nesterov,

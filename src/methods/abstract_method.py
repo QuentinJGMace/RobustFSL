@@ -3,6 +3,7 @@ import torch.nn as nn
 from src.methods.utils import get_one_hot
 from src.logger import Logger
 import numpy as np
+import matplotlib.pyplot as plt
 import tqdm
 
 
@@ -40,6 +41,18 @@ class AbstractMethod(nn.Module):
         """
         self.timestamps.append(timestamp)
         self.criterions.append(criterions)
+
+    def plot_convergence(self, filepath="conv_plot_mocul.png"):
+        """
+        Plots the convergence plot
+        inputs:
+            filepath : str
+        """
+        plt.plot(range(len(self.criterions)), self.criterions)
+        plt.xlabel("Iter")
+        plt.ylabel("Criterion")
+        plt.savefig(filepath)
+        plt.close()
 
     def record_acc(self, y_q):
         """
