@@ -3,7 +3,7 @@ import torch
 
 from tests.helpers import load_cfg
 from src.api.cfg_utils import load_cfg_from_cfg_file, merge_cfg_from_list
-from src.methods.rpaddle_gd_2 import MutlNoisePaddle_GD
+from src.methods.rpaddle_gd import MutlNoisePaddle_GD
 
 dummy_samples = torch.tensor(
     [
