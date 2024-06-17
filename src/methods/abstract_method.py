@@ -3,6 +3,7 @@ import torch.nn as nn
 from src.methods.utils import get_one_hot
 from src.logger import Logger
 import numpy as np
+import matplotlib.pyplot as plt
 import tqdm
 
 
@@ -12,20 +13,24 @@ class AbstractMethod(nn.Module):
     def __init__(self, backbone, device, log_file, args):
         super(AbstractMethod, self).__init__()
         self.device = device
-        self.n_iter = args.n_iter
+        self.n_iter = args.iter
+        self.n_class = args.n_class
         self.backbone = backbone
         self.log_file = log_file
         self.logger = Logger(__name__, self.log_file)
         self.args = args
 
     def __del__(self):
-        self.logger.del_logger()
+        if hasattr(self, "logger"):
+            self.logger.del_logger()
 
     def init_info_lists(self):
         """
         Initializes the lists for logging
         """
-        pass
+        self.timestamps = []
+        self.criterions = []
+        self.test_acc = []
 
     def record_convergence(self, timestamp, criterions):
         """
@@ -37,27 +42,34 @@ class AbstractMethod(nn.Module):
         self.timestamps.append(timestamp)
         self.criterions.append(criterions)
 
-    def record_accuracy(self, acc):
+    def plot_convergence(self, filepath="conv_plot_mocul.png"):
         """
-        Records the accuracy
+        Plots the convergence plot
         inputs:
-            acc : torch.Tensor of shape [n_task]
+            filepath : str
         """
-        self.test_acc.append(acc)
+        plt.plot(range(len(self.criterions)), self.criterions)
+        plt.xlabel("Iter")
+        plt.ylabel("Criterion")
+        plt.savefig(filepath)
+        plt.close()
 
-    def compute_accuracy(self, query, y_q):
+    def record_acc(self, y_q):
         """
-        Computes the accuracy of the model
         inputs:
-            logits : torch.Tensor of shape [n_task, query, num_class]
-            y_q : torch.Tensor of shape [n_task, query]
-        outputs:
-            accuracy : float
+            y_q : torch.Tensor of shape [n_task, n_query] :
         """
-        logits = self.get_logits(query).detach()
-        preds = logits.argmax(2)
-        accuracy = (preds == y_q).float().mean(1, keepdim=True)
-        return accuracy
+        preds_q = self.predict()
+        accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
+        self.test_acc.append(accuracy)
+
+    # def record_accuracy(self, acc):
+    #     """
+    #     Records the accuracy
+    #     inputs:
+    #         acc : torch.Tensor of shape [n_task]
+    #     """
+    #     self.test_acc.append(acc)
 
     def get_logs(self):
         """
@@ -94,6 +106,14 @@ class AbstractMethod(nn.Module):
             samples : torch.Tensor of shape [n_task, shot, feature_dim]
         outputs:
             logits : torch.Tensor of shape [n_task, shot, num_class]
+        """
+        pass
+
+    def predict(self):
+        """
+        Returns the predictions
+        outputs:
+            preds : torch.Tensor of shape [n_task, n_query]
         """
         pass
 

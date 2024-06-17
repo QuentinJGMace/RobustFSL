@@ -1,345 +1,443 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import time
-import numpy as np
+
+import torch
+import torch.nn.functional as F
 from tqdm import tqdm
-
+from src.methods.utils import get_one_hot, simplex_project
 from src.methods.abstract_method import AbstractMethod, MinMaxScaler
-from src.methods.utils import get_one_hot
 
 
-class RobustPaddle_GD(AbstractMethod):
-    """Robust PADDLE method for few shot learning with gradient descent optimization"""
-
+class MutlNoisePaddle_GD(AbstractMethod):
     def __init__(self, backbone, device, log_file, args):
-        super(RobustPaddle_GD, self).__init__(backbone, device, log_file, args)
-
+        super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.lambd = args.lambd
         self.lr = args.lr
-        self.n_way = args.n_way
-
-        if not hasattr(args, "beta"):
-            raise Warning("Beta parameter is not defined, setting it to 2")
-        if args.beta <= 1:
-            raise ValueError("Beta should be greater than 1")
         self.beta = args.beta
-
+        self.kappa = args.kappa
+        self.id_cov = args.id_cov
+        self.eta = (2 / self.kappa) ** (1 / 2)
         self.init_info_lists()
-
-    def init_info_lists(self):
-        """
-        Initializes the lists for logging
-        """
-        self.timestamps = []
-        self.criterions = []
-        self.test_acc = []
-
-    def get_logits(self, samples):
-        """
-        Gets the logits of the samples
-        inputs:
-            samples : torch.Tensor of shape [n_task, shot, feature_dim]
-        outputs:
-            logits : torch.Tensor of shape [n_task, shot, num_class]
-        """
-
-        n_tasks = samples.size(0)
-        logits = -(1 / 2) * torch.cdist(samples, self.prototypes, p=self.beta)
-        return logits
 
     def init_prototypes(self, support, y_s):
         """
-        Initializes the prototypes
         inputs:
             support : torch.Tensor of shape [n_task, shot, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
 
         updates :
-            self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
+            self.w : torch.Tensor of shape [n_task, num_class, feature_dim]
         """
         n_tasks = support.size(0)
-        one_hot = get_one_hot(y_s)
+        one_hot = get_one_hot(y_s, self.n_class)
         counts = one_hot.sum(1).view(n_tasks, -1, 1)
         weights = one_hot.transpose(1, 2).matmul(support)
-        self.prototypes = (weights / counts).to(
-            self.device
-        )  # average of the feature of each classes on the support set
+        self.prototypes = torch.nn.Parameter(weights / counts)
 
-    def fit(self, task_dic, shot):
+    def init_params(self, support, y_s, query):
         """
-        Fits the model
+        Initializes the parameters
         inputs:
-            task_dic : dict    {"x_s": torch.Tensor, "y_s": torch.Tensor, "x_q": torch.Tensor, "y_q": torch.Tensor}
-            shot : int
-        updates :
-            self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
-            self.u : torch.Tensor of shape [n_task, n_query, num_class]
-        returns:
-            logs : dict
+            support : torch.Tensor of shape [n_task, shot, feature_dim]
+            y_s : torch.Tensor of shape [n_task, shot]
+            query : torch.Tensor of shape [n_task, n_query, feature_dim]
         """
-        self.logger.info(
-            " ==> Executing RobustPADDLE-GD with lambda = {}, beta = {}".format(
-                self.lambd, self.beta
-            )
-        )
-        y_s = task_dic["y_s"]  # [n_task, shot]
-        y_q = task_dic["y_q"]  # [n_task, n_query]
-        support = task_dic["x_s"]  # [n_task, shot, feature_dim]
-        query = task_dic["x_q"]  # [n_task, n_query, feature_dim]
+        n_tasks, n_sample, feature_dim = query.size()
 
-        # Transfer tensors to GPU if needed
-        support = support.to(self.device)
-        query = query.to(self.device)
-        y_s = y_s.long().squeeze(2).to(self.device)
-        y_q = y_q.long().squeeze(2).to(self.device)
-
-        # Get one hot encoding of the labels
-        y_s_one_hot = F.one_hot(y_s, self.n_ways).to(self.device)
-
-        # Perform normalizations
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        query, support = scaler(query, support)
-
-        # Inits the prototypes and u
         self.init_prototypes(support, y_s)
-        self.u = (self.get_logits(query)).softmax(-1).to(self.device)
-        self.prototypes.requires_grad_()
-        self.u.requires_grad_()
-
-        # Init logs
-        self.init_info_lists()
-
-        # Initialize the optimizer
-        optimizer = torch.optim.Adam([self.prototypes, self.u], lr=self.lr)
-
-        # Concatenate support and query
-        all_samples = torch.cat([support, query], 1)
-
-        for i in tqdm(range(self.n_iter)):
-
-            old_prototypes = self.prototypes.detach()
-            tstart = time.time()
-
-            # data fitting term
-            distances = torch.cdist(all_samples, self.prototypes) ** self.beta
-            complete_u = torch.cat([y_s_one_hot, self.u], dim=1)
-
-            data_fitting = 1 / 2 * (distances * complete_u).sum((-2, -1)).sum(0)
-
-            # Regularization term (partition complexity)
-            query_class_ratios = self.u.mean(1).to(self.device)
-            partition_complexity = (
-                (query_class_ratios * torch.log(query_class_ratios + 1e-12))
-                .sum(-1)
-                .sum(0)
+        self.theta = torch.nn.Parameter(torch.ones(n_tasks, n_sample).to(self.device))
+        # self.q strores the n_class covariances
+        self.q = torch.nn.Parameter(
+            (
+                torch.eye(feature_dim)
+                .unsqueeze(0)
+                .repeat(n_tasks, self.n_class, 1, 1)
+                .to(self.device)
             )
-
-            # Loss computation
-            loss = (data_fitting - self.lambd * partition_complexity).to(self.device)
-
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            # Projection into simplex
-            with torch.no_grad():
-                self.u = self.simplex_project(self.u)
-                weight_diff = (old_prototypes - self.prototypes).norm(dim=-1).mean(-1)
-                criterions = weight_diff
-
-            t_end = time.time()
-            self.record_convergence(timestamp=t_end - tstart, criterions=criterions)
-
-        self.record_accuracy(acc=self.compute_accuracy(y_q, self.u))
-        logs = self.get_logs()
-        return logs
-
-    def simplex_project(self, u: torch.Tensor, l=1.0):
-        """
-        Taken from https://www.researchgate.net/publication/283568278_NumPy_SciPy_Recipes_for_Data_Science_Computing_Nearest_Neighbors
-        u: [n_tasks, n_q, K]
-        """
-
-        # Put in the right form for the function
-        matX = u.permute(0, 2, 1).detach().cpu().numpy()
-
-        # Core function
-        n_tasks, m, n = matX.shape
-        matS = -np.sort(-matX, axis=1)
-        matC = np.cumsum(matS, axis=1) - l
-        matH = matS - matC / (np.arange(m) + 1).reshape(1, m, 1)
-        matH[matH <= 0] = np.inf
-
-        r = np.argmin(matH, axis=1)
-        t = []
-        for task in range(n_tasks):
-            t.append(matC[task, r[task], np.arange(n)] / (r[task] + 1))
-        t = np.stack(t, 0)
-        matY = matX - t[:, None, :]
-        matY[matY < 0] = 0
-
-        # Back to torch
-        matY = torch.from_numpy(matY).permute(0, 2, 1).to(self.device)
-
-        assert torch.allclose(
-            matY.sum(-1), torch.ones_like(matY.sum(-1))
-        ), "Simplex constraint does not seem satisfied"
-
-        return matY
-
-
-class MultNoisePaddle(RobustPaddle_GD):
-    def __init__(self, backbone, device, log_file, args):
-        super(RobustPaddle_GD, self).__init__(backbone, device, log_file, args)
-
-        self.lambd = args.lambd
-        self.lr = args.lr
-        self.n_way = args.n_way
-
-        if not hasattr(args, "beta"):
-            raise Warning("Beta parameter is not defined, setting it to 2")
-        if args.beta <= 1:
-            raise ValueError("Beta should be greater than 1")
-        self.beta = args.beta
-
-        self.kappa = args.kappa
-        self.eta = (2 / self.kappa) ** (1 / 2)
-
-        self.init_info_lists()
-
-    def get_logits(self, samples):
-        """
-        Gets the logits of the samples
-        inputs:
-            samples : torch.Tensor of shape [n_task, shot, feature_dim]
-        outputs:
-            logits : torch.Tensor of shape [n_task, shot, num_class]
-        """
-
-        n_tasks = samples.size(0)
-        logits = (
-            -(1 / 2)
-            * torch.cdist(samples, self.prototypes, p=self.beta)
-            / (self.theta ** (self.beta - 1))
         )
+        self.u = torch.nn.Parameter(
+            (self.get_logits(query)).softmax(-1).to(self.device)
+        )
+
+        self.theta.requires_grad = True
+        self.u.requires_grad = True
+        self.q.requires_grad = True
+
+    def compute_mahalanobis(self, samples, theta):
+        """
+        Computes the Mahalanobis distance between the samples and the prototypes
+        inputs:
+            samples : torch.Tensor of shape [n_task, n_support + n_query, feature_dim]
+        """
+        # Computes the Mahalanobis distance between the samples and the prototypes
+        # [n_task, n_sample, n_class]
+        # self.q : [n_task, 1, n_class, feature_dim, feature_dim]
+        # self.prototypes: [n_task, n_class, feature_dim]
+        # samples : [n_task, n_sample, 1, feature_dim]
+        tranformed_samples = torch.matmul(
+            self.q.unsqueeze(1), samples.unsqueeze(2).unsqueeze(-1)
+        ).squeeze(
+            -1
+        )  # Q_kx_n [n_task, n_sample, n_class, feature_dim]
+        reshaped_theta = theta.unsqueeze(-1)  # theta shape : [n_task, n_sample, 1]
+        # computes the norm of the difference between the samples and the prototypes
+        dist_beta = (tranformed_samples - self.prototypes.unsqueeze(1)).norm(
+            dim=-1
+        ) ** self.beta  # ||Q_kx_n - prototype_k||^beta [n_task, n_sample, n_class]
+        dist_beta /= reshaped_theta ** (
+            self.beta - 1
+        )  # ||Q_kx_n - prototype_k||^beta/theta [n_task, n_sample, n_class]
+
+        return dist_beta
+
+    def get_logits(self, samples) -> torch.Tensor:
+        n_tasks, n_query = samples.size(0), samples.size(1)
+        # logits for sample n and class k is -1/2 (x_n - prototype_k)^T* (theta_n*Q_k)^2 * (x_n - prototype_k)
+
+        dist = self.compute_mahalanobis(samples, self.theta)
+        logits = -1 / 2 * dist
+
         return logits
 
-    def init_params(self, support, y_s, n_sample):
+    def predict(self):
         """
-        Initializes the prototypes
-        inputs:
-            support : torch.Tensor of shape [n_task, shot, feature_dim]
-            y_s : torch.Tensor of shape [n_task, shot]
-            n_sample : number of samples in support + query
-        updates :
-            self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
-        """
-        n_tasks = support.size(0)
-        one_hot = get_one_hot(y_s)
-        counts = one_hot.sum(1).view(n_tasks, -1, 1)
-        weights = one_hot.transpose(1, 2).matmul(support)
-        self.prototypes = (weights / counts).to(
-            self.device
-        )  # average of the feature of each classes on the support set
-        self.theta = torch.ones(n_tasks, n_sample).to(self.device)
-
-    def fit(self, task_dic, shot):
-        """
-        Fits the model
-        inputs:
-            task_dic : dict    {"x_s": torch.Tensor, "y_s": torch.Tensor, "x_q": torch.Tensor, "y_q": torch.Tensor}
-            shot : int
-        updates :
-            self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
-            self.u : torch.Tensor of shape [n_task, n_query, num_class]
         returns:
-            logs : dict
+            preds : torch.Tensor of shape [n_task, n_query]
         """
-        self.logger.info(
-            " ==> Executing RobustPADDLE-GD with lambda = {}, beta = {}".format(
-                self.lambd, self.beta
-            )
-        )
-        y_s = task_dic["y_s"]  # [n_task, shot]
-        y_q = task_dic["y_q"]  # [n_task, n_query]
-        support = task_dic["x_s"]  # [n_task, shot, feature_dim]
-        query = task_dic["x_q"]  # [n_task, n_query, feature_dim]
+        with torch.no_grad():
+            preds = self.u.argmax(2)
+        return preds
 
-        # Transfer tensors to GPU if needed
+    def run_task(self, task_dic, shot):
+        """
+        Fits the model to the support set
+        inputs:
+            task_dic : dict {"x_s": torch.Tensor, "y_s": torch.Tensor, "x_q": torch.Tensor, "y_q": torch.Tensor}
+            shot : int
+        """
+        support, query, y_s, y_q = (
+            task_dic["x_s"],
+            task_dic["x_q"],
+            task_dic["y_s"],
+            task_dic["y_q"],
+        )
+
         support = support.to(self.device)
         query = query.to(self.device)
         y_s = y_s.long().squeeze(2).to(self.device)
         y_q = y_q.long().squeeze(2).to(self.device)
 
-        # Get one hot encoding of the labels
-        y_s_one_hot = F.one_hot(y_s, self.n_ways).to(self.device)
-
         # Perform normalizations
         scaler = MinMaxScaler(feature_range=(0, 1))
         query, support = scaler(query, support)
 
-        # Inits the prototypes and u
-        self.init_prototypes(support, y_s)
-        self.u = (self.get_logits(query)).softmax(-1).to(self.device)
-        self.prototypes.requires_grad_()
-        self.u.requires_grad_()
+        # Run adaptation
+        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
 
-        # Init logs
-        self.init_info_lists()
+        # Extract adaptation logs
+        logs = self.get_logs()
 
-        # Initialize the optimizer
-        optimizer = torch.optim.Adam([self.prototypes, self.u], lr=self.lr)
+        if self.args.plot:
+            self.plot_convergence()
 
-        # Concatenate support and query
-        all_samples = torch.cat([support, query], 1)
+        return logs
 
+    def run_method(self, support, query, y_s, y_q):
+        """
+        inputs:
+            support : torch.Tensor of shape [n_task, shot, feature_dim]
+            query : torch.Tensor of shape [n_task, n_query, feature_dim]
+            y_s : torch.Tensor of shape [n_task, shot]
+            y_q : torch.Tensor of shape [n_task, n_query]
+        """
+        # self.logger.info(
+        #     " ==> Executing RobustPADDLE with LAMBDA = {}".format(self.lambd)
+        # )
+
+        t0 = time.time()
+        y_s_one_hot = F.one_hot(y_s, self.n_class).to(self.device)
+
+        self.init_params(support, y_s, query)
+        optimizer = torch.optim.SGD(
+            [self.prototypes, self.theta, self.u, self.q], lr=self.lr
+        )
+
+        all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
+        theta_support = torch.ones(support.size(0), support.size(1)).to(self.device)
+
+        feature_dim = all_samples.size(-1)
         for i in tqdm(range(self.n_iter)):
 
-            old_prototypes = self.prototypes.detach()
-            tstart = time.time()
+            prototypes_old = self.prototypes.detach()
+            theta_old = self.theta.detach()
+            q_old = self.q.detach()
+            u_old = self.u.detach()
+            t0 = time.time()
+            all_theta = torch.cat([theta_support, self.theta], 1)
 
-            # data fitting term
-            distances = torch.cdist(all_samples, self.prototypes) ** self.beta
-            distances = distances / (self.theta ** (self.beta - 1))
-            complete_u = torch.cat([y_s_one_hot, self.u], dim=1)
+            # Data fitting term
+            distances = self.compute_mahalanobis(all_samples, all_theta)
+            all_p = torch.cat([y_s_one_hot.float(), self.u.float()], dim=1)
 
-            data_fitting = 1 / 2 * (distances * complete_u).sum((-2, -1)).sum(0)
+            data_fitting = (
+                (distances * all_p).sum((-2, -1)).mean(0)
+            )  # .mean(0) for more stability ?
 
-            # Term for theta
-            sample_dim = all_samples.size(-1)
-            theta_term = (sample_dim * (1 - 1 / self.beta) - self.kappa) * nn.log(
-                self.theta
-            ).sum(1).sum(0) + (1 / self.eta) * torch.norm(self.theta, dim=1, p=2).sum(0)
+            # Theta regularization term
+            sum_log_theta = (
+                feature_dim * (1 - 1 / self.beta) - self.kappa
+            ) * torch.log(self.theta + 1e-12).sum(1).mean(0)
+            l2_theta = (
+                1 / self.eta * (self.theta.norm(dim=-1, keepdim=False)) ** 2
+            ).mean(0)
 
-            # Regularization term (partition complexity)
+            theta_term = sum_log_theta + l2_theta
+
+            # Covariance regularizing term
+            if not self.id_cov:
+                q_log_det = torch.logdet(self.q).unsqueeze(1)
+                q_term = (all_p * q_log_det).sum((-2, -1)).mean(0)
+            else:
+                q_term = 0
+
+            # partition complexity term
             query_class_ratios = self.u.mean(1).to(self.device)
             partition_complexity = (
                 (query_class_ratios * torch.log(query_class_ratios + 1e-12))
                 .sum(-1)
-                .sum(0)
+                .mean(0)
             )
 
-            # Loss computation
-            loss = (data_fitting - self.lambd * partition_complexity + theta_term).to(
-                self.device
+            # enthropic barrier
+            ent_barrier = (self.u * torch.log(self.u + 1e-12)).sum(-1).sum(-1).mean(0)
+
+            # final loss
+            loss = (
+                data_fitting
+                - self.lambd * partition_complexity
+                + theta_term
+                - q_term
+                + ent_barrier  # - self.lambd * partition_complexity + theta_term - q_term
             )
 
             # Backward pass
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             # Projection into simplex
             with torch.no_grad():
-                self.u = self.simplex_project(self.u)
-                weight_diff = (old_prototypes - self.prototypes).norm(dim=-1).mean(-1)
+                self.u.data = simplex_project(self.u, device=self.device)
+                weight_diff = (prototypes_old - self.prototypes).norm(dim=-1).mean(-1)
+
                 criterions = weight_diff
 
             t_end = time.time()
-            self.record_convergence(timestamp=t_end - tstart, criterions=criterions)
+            self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 
-        self.record_accuracy(acc=self.compute_accuracy(y_q, self.u))
+        self.record_acc(y_q=y_q)
+
+
+class MutlNoisePaddle_GD_id(AbstractMethod):
+    def __init__(self, backbone, device, log_file, args):
+        super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
+        self.lambd = args.lambd
+        self.lr = args.lr
+        self.beta = args.beta
+        self.kappa = args.kappa
+        self.eta = (2 / self.kappa) ** (1 / 2)
+        self.id_cov = args.id_cov
+        self.init_info_lists()
+
+    def init_prototypes(self, support, y_s):
+        """
+        inputs:
+            support : torch.Tensor of shape [n_task, shot, feature_dim]
+            y_s : torch.Tensor of shape [n_task, shot]
+
+        updates :
+            self.w : torch.Tensor of shape [n_task, num_class, feature_dim]
+        """
+        n_tasks = support.size(0)
+        one_hot = get_one_hot(y_s, self.n_class)
+        counts = one_hot.sum(1).view(n_tasks, -1, 1)
+        weights = one_hot.transpose(1, 2).matmul(support)
+        self.prototypes = torch.nn.Parameter(weights / counts)
+
+    def init_params(self, support, y_s, query):
+        """
+        Initializes the parameters
+        inputs:
+            support : torch.Tensor of shape [n_task, shot, feature_dim]
+            y_s : torch.Tensor of shape [n_task, shot]
+            query : torch.Tensor of shape [n_task, n_query, feature_dim]
+        """
+        n_tasks, n_sample, feature_dim = query.size()
+
+        self.init_prototypes(support, y_s)
+        self.theta = torch.nn.Parameter(torch.ones(n_tasks, n_sample).to(self.device))
+        self.u = torch.nn.Parameter(
+            (self.get_logits(query)).softmax(-1).to(self.device)
+        )
+
+        self.theta.requires_grad = True
+        self.u.requires_grad = True
+        self.prototypes.requires_grad = True
+
+    def compute_mahalanobis(self, samples, theta):
+        """
+        Computes the Mahalanobis distance between the samples and the prototypes
+        inputs:
+            samples : torch.Tensor of shape [n_task, n_support + n_query, feature_dim]
+        """
+        # Computes the Mahalanobis distance between the samples and the prototypes
+        # [n_task, n_sample, n_class]
+        # self.q : [n_task, 1, n_class, feature_dim, feature_dim]
+        # self.prototypes: [n_task, n_class, feature_dim]
+        # samples : [n_task, n_sample, 1, feature_dim]
+        tranformed_samples = samples.unsqueeze(
+            2
+        )  # Q_kx_n [n_task, n_sample, n_class, feature_dim]
+        reshaped_theta = theta.unsqueeze(-1)  # theta shape : [n_task, n_sample, 1]
+        # computes the norm of the difference between the samples and the prototypes
+        dist_beta = (tranformed_samples - self.prototypes.unsqueeze(1)).norm(
+            dim=-1
+        ) ** self.beta  # ||Q_kx_n - prototype_k||^beta [n_task, n_sample, n_class]
+        dist_beta /= reshaped_theta ** (
+            self.beta - 1
+        )  # ||Q_kx_n - prototype_k||^beta/theta [n_task, n_sample, n_class]
+
+        return dist_beta
+
+    def get_logits(self, samples) -> torch.Tensor:
+        n_tasks, n_query = samples.size(0), samples.size(1)
+        # logits for sample n and class k is -1/2 (x_n - prototype_k)^T* (theta_n*Q_k)^2 * (x_n - prototype_k)
+
+        dist = self.compute_mahalanobis(samples, self.theta)
+        logits = -1 / 2 * dist
+
+        return logits
+
+    def predict(self):
+        """
+        returns:
+            preds : torch.Tensor of shape [n_task, n_query]
+        """
+        with torch.no_grad():
+            preds = self.u.argmax(2)
+        return preds
+
+    def run_task(self, task_dic, shot):
+        """
+        Fits the model to the support set
+        inputs:
+            task_dic : dict {"x_s": torch.Tensor, "y_s": torch.Tensor, "x_q": torch.Tensor, "y_q": torch.Tensor}
+            shot : int
+        """
+        support, query, y_s, y_q = (
+            task_dic["x_s"],
+            task_dic["x_q"],
+            task_dic["y_s"],
+            task_dic["y_q"],
+        )
+
+        support = support.to(self.device)
+        query = query.to(self.device)
+        y_s = y_s.long().squeeze(2).to(self.device)
+        y_q = y_q.long().squeeze(2).to(self.device)
+
+        # Perform normalizations
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        query, support = scaler(query, support)
+
+        # Run adaptation
+        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
+
+        # Extract adaptation logs
         logs = self.get_logs()
+
+        if self.args.plot:
+            self.plot_convergence()
+
         return logs
+
+    def run_method(self, support, query, y_s, y_q):
+        """
+        inputs:
+            support : torch.Tensor of shape [n_task, shot, feature_dim]
+            query : torch.Tensor of shape [n_task, n_query, feature_dim]
+            y_s : torch.Tensor of shape [n_task, shot]
+            y_q : torch.Tensor of shape [n_task, n_query]
+        """
+        # self.logger.info(
+        #     " ==> Executing RobustPADDLE with LAMBDA = {}".format(self.lambd)
+        # )
+
+        t0 = time.time()
+        y_s_one_hot = F.one_hot(y_s, self.n_class).to(self.device)
+
+        self.init_params(support, y_s, query)
+        optimizer = torch.optim.SGD([self.prototypes, self.theta, self.u], lr=self.lr)
+
+        all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
+        theta_support = torch.ones(support.size(0), support.size(1)).to(self.device)
+
+        feature_dim = all_samples.size(-1)
+        for i in tqdm(range(self.n_iter)):
+
+            prototypes_old = self.prototypes.detach()
+            theta_old = self.theta.detach()
+            u_old = self.u.detach()
+            t0 = time.time()
+            all_theta = torch.cat([theta_support, self.theta], 1)
+
+            # Data fitting term
+            distances = self.compute_mahalanobis(all_samples, all_theta)
+            all_p = torch.cat([y_s_one_hot.float(), self.u.float()], dim=1)
+
+            data_fitting = (
+                (distances * all_p).sum((-2, -1)).mean(0)
+            )  # .mean(0) for more stability ?
+
+            # Theta regularization term
+            sum_log_theta = (
+                feature_dim * (1 - 1 / self.beta) - self.kappa
+            ) * torch.log(self.theta + 1e-12).sum(1).mean(0)
+            l2_theta = (
+                1 / self.eta * (self.theta.norm(dim=-1, keepdim=False)) ** 2
+            ).mean(0)
+
+            theta_term = sum_log_theta + l2_theta
+
+            # partition complexity term
+            query_class_ratios = self.u.mean(1).to(self.device)
+            partition_complexity = (
+                (query_class_ratios * torch.log(query_class_ratios + 1e-12))
+                .sum(-1)
+                .mean(0)
+            )
+
+            # enthropic barrier
+            ent_barrier = (self.u * torch.log(self.u + 1e-12)).sum(-1).sum(-1).mean(0)
+
+            # final loss
+            loss = (
+                data_fitting
+                - self.lambd * partition_complexity
+                + theta_term
+                + ent_barrier  # - self.lambd * partition_complexity + theta_term - q_term
+            )
+
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            # Projection into simplex
+            with torch.no_grad():
+                self.u.data = simplex_project(self.u, device=self.device)
+                weight_diff = (prototypes_old - self.prototypes).norm(dim=-1).mean(-1)
+
+                criterions = weight_diff
+
+            t_end = time.time()
+            self.record_convergence(timestamp=t_end - t0, criterions=criterions)
+
+        self.record_acc(y_q=y_q)
