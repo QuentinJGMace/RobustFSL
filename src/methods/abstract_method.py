@@ -77,7 +77,10 @@ class AbstractMethod(nn.Module):
         outputs:
             logs : dict {"timestamps": list, "criterions": np.array, "acc": np.array}
         """
-        self.criterions = torch.stack(self.criterions, dim=0).cpu().numpy()
+        if len(self.criterions) == 0:
+            self.criterions = []
+        else:
+            self.criterions = torch.stack(self.criterions, dim=0).cpu().numpy()
         self.test_acc = torch.cat(self.test_acc, dim=1).cpu().numpy()
         return {
             "timestamps": self.timestamps,
