@@ -42,7 +42,8 @@ class Paddle_GD(KM):
 
         for i in tqdm(range(self.n_iter)):
 
-            w_old = self.w.detach()
+            w_old = self.w.clone()
+            u_old = self.u.clone()
             t0 = time.time()
 
             # Data fitting term
@@ -67,10 +68,9 @@ class Paddle_GD(KM):
             # Projection
             with torch.no_grad():
                 self.u = simplex_project(self.u, device=self.device)
-                weight_diff = (w_old - self.w).norm(dim=-1).mean(-1)
-                criterions = weight_diff
 
             t1 = time.time()
+            criterions = self.get_criterions(w_old, u_old)
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.record_acc(y_q=y_q)

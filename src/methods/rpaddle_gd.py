@@ -167,10 +167,10 @@ class MutlNoisePaddle_GD(AbstractMethod):
         feature_dim = all_samples.size(-1)
         for i in tqdm(range(self.n_iter)):
 
-            prototypes_old = self.prototypes.detach()
-            theta_old = self.theta.detach()
-            q_old = self.q.detach()
-            u_old = self.u.detach()
+            prototypes_old = self.prototypes.clone()
+            theta_old = self.theta.clone()
+            q_old = self.q.clone()
+            u_old = self.u.clone()
             t0 = time.time()
             all_theta = torch.cat([theta_support, self.theta], 1)
 
@@ -226,14 +226,36 @@ class MutlNoisePaddle_GD(AbstractMethod):
             # Projection into simplex
             with torch.no_grad():
                 self.u.data = simplex_project(self.u, device=self.device)
-                weight_diff = (prototypes_old - self.prototypes).norm(dim=-1).mean(-1)
-
-                criterions = weight_diff
 
             t_end = time.time()
+            criterions = self.get_criterions(prototypes_old, q_old, theta_old, u_old)
             self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 
         self.record_acc(y_q=y_q)
+
+    def get_criterions(self, old_proto, old_cov, old_theta, old_u):
+        """
+        inputs:
+            old_prot : torch.Tensor of shape [n_task, num_class, feature_dim]
+            old_cov : torch.Tensor of shape [n_task, num_class, feature_dim, feature_dim]
+            old_theta : torch.Tensor of shape [n_task, n_sample]
+            old_u: torch.Tensor of shape [n_task, n_query, num_class]
+
+        returns:
+            criterions : torch.Tensor of shape [n_task]
+        """
+        with torch.no_grad():
+            crit_proto = (self.prototypes - old_proto).norm(dim=[1, 2]).mean().item()
+            crit_cov = (self.cov - old_cov).norm(dim=[1, 2, 3]).mean().item()
+            crit_theta = (self.theta - old_theta).norm(dim=[1]).mean().item()
+            crit_u = (self.u - old_u).norm(dim=[1, 2]).mean().item()
+
+        return {
+            "proto": crit_proto,
+            "cov": crit_cov,
+            "theta": crit_theta,
+            "u": crit_u,
+        }
 
 
 class MutlNoisePaddle_GD_id(AbstractMethod):
@@ -354,9 +376,6 @@ class MutlNoisePaddle_GD_id(AbstractMethod):
         # Extract adaptation logs
         logs = self.get_logs()
 
-        if self.args.plot:
-            self.plot_convergence()
-
         return logs
 
     def run_method(self, support, query, y_s, y_q):
@@ -383,9 +402,9 @@ class MutlNoisePaddle_GD_id(AbstractMethod):
         feature_dim = all_samples.size(-1)
         for i in tqdm(range(self.n_iter)):
 
-            prototypes_old = self.prototypes.detach()
-            theta_old = self.theta.detach()
-            u_old = self.u.detach()
+            prototypes_old = self.prototypes.clone()
+            theta_old = self.theta.clone()
+            u_old = self.u.clone()
             t0 = time.time()
             all_theta = torch.cat([theta_support, self.theta], 1)
 
@@ -433,11 +452,30 @@ class MutlNoisePaddle_GD_id(AbstractMethod):
             # Projection into simplex
             with torch.no_grad():
                 self.u.data = simplex_project(self.u, device=self.device)
-                weight_diff = (prototypes_old - self.prototypes).norm(dim=-1).mean(-1)
-
-                criterions = weight_diff
 
             t_end = time.time()
+            criterions = self.get_criterions(prototypes_old, theta_old, u_old)
             self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 
         self.record_acc(y_q=y_q)
+
+    def get_criterions(self, old_proto, old_theta, old_u):
+        """
+        inputs:
+            old_prot : torch.Tensor of shape [n_task, num_class, feature_dim]
+            old_theta : torch.Tensor of shape [n_task, n_sample]
+            old_u: torch.Tensor of shape [n_task, n_query, num_class]
+
+        returns:
+            criterions : torch.Tensor of shape [n_task]
+        """
+        with torch.no_grad():
+            crit_proto = (self.prototypes - old_proto).norm(dim=[1, 2]).mean().item()
+            crit_theta = (self.theta - old_theta).norm(dim=[1]).mean().item()
+            crit_u = (self.u - old_u).norm(dim=[1, 2]).mean().item()
+
+        return {
+            "proto": crit_proto,
+            "theta": crit_theta,
+            "u": crit_u,
+        }

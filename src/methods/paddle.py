@@ -97,13 +97,15 @@ class Paddle(KM):
         n_task, n_ways = y_s_one_hot.size(0), y_s_one_hot.size(2)
 
         self.init_w(support=support, y_s=y_s)  # initialize basic prototypes
+        self.u = (self.get_logits(query)).softmax(-1).to(self.device)
         self.v = torch.zeros(n_task, n_ways).to(
             self.device
         )  # initialize v to vector of zeros
 
         for i in wrap_tqdm(range(self.n_iter), disable_tqdm=True):
 
-            w_old = self.w
+            w_old = self.w.clone()
+            u_old = self.u.clone()
             t0 = time.time()
 
             self.u_update(query)
@@ -111,8 +113,7 @@ class Paddle(KM):
             self.w_update(support, query, y_s_one_hot)
 
             t1 = time.time()
-            weight_diff = (w_old - self.w).norm(dim=-1).mean(-1)
-            criterions = weight_diff
+            criterions = self.get_criterions(w_old, u_old)
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.record_acc(y_q=y_q)

@@ -1,10 +1,10 @@
+from collections import defaultdict
+
+import numpy as np
 import torch
 import torch.nn as nn
-from src.methods.utils import get_one_hot
 from src.logger import Logger
-import numpy as np
 import matplotlib.pyplot as plt
-import tqdm
 
 
 class AbstractMethod(nn.Module):
@@ -29,7 +29,7 @@ class AbstractMethod(nn.Module):
         Initializes the lists for logging
         """
         self.timestamps = []
-        self.criterions = []
+        self.criterions = defaultdict(lambda: [])
         self.test_acc = []
 
     def record_convergence(self, timestamp, criterions):
@@ -40,14 +40,16 @@ class AbstractMethod(nn.Module):
             criterion : torch.Tensor of shape [n_task]
         """
         self.timestamps.append(timestamp)
-        self.criterions.append(criterions)
+        for key, value in criterions.items():
+            self.criterions[key].append(value)
 
-    def plot_convergence(self, filepath="conv_plot_mocul.png"):
+    def plot_convergence(self, dirpath):
         """
         Plots the convergence plot
         inputs:
-            filepath : str
+            dirpath : str
         """
+        raise NotImplementedError("Eh t'as oublié de me faire")
         plt.plot(range(len(self.criterions)), self.criterions)
         plt.xlabel("Iter")
         plt.ylabel("Criterion")
@@ -77,10 +79,8 @@ class AbstractMethod(nn.Module):
         outputs:
             logs : dict {"timestamps": list, "criterions": np.array, "acc": np.array}
         """
-        if len(self.criterions) == 0:
-            self.criterions = []
-        else:
-            self.criterions = torch.stack(self.criterions, dim=0).cpu().numpy()
+        for key in self.criterions.keys():
+            self.criterions[key] = np.array(self.criterions[key])
         self.test_acc = torch.cat(self.test_acc, dim=1).cpu().numpy()
         return {
             "timestamps": self.timestamps,
