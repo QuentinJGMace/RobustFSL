@@ -23,35 +23,59 @@ def get_one_hot(y_s, n_class):
     return one_hot
 
 
-def simplex_project(u: torch.Tensor, device, l=1.0):
+def simplex_project(tensor, device):
+    """Project a tensor onto the simplex.
+
+    Args:
+        tensor (torch.Tensor): Input tensor of shape (..., n) where n is the size of the last dimension.
+
+    Returns:
+        torch.Tensor: The projected tensor of the same shape as the input.
     """
-    Taken from https://www.researchgate.net/publication/283568278_NumPy_SciPy_Recipes_for_Data_Science_Computing_Nearest_Neighbors
-    u: [n_tasks, n_q, K]
-    """
+    # Get the shape of the input tensor
+    shape = tensor.shape
+    # Reshape the tensor to 2D: (batch_size, n)
+    tensor_reshaped = tensor.view(-1, shape[-1])
 
-    # Put in the right form for the function
-    matX = u.permute(0, 2, 1).detach().cpu().numpy()
+    # Sort the tensor along the last dimension in descending order
+    sorted_tensor, _ = torch.sort(tensor_reshaped, descending=True, dim=1)
 
-    # Core function
-    n_tasks, m, n = matX.shape
-    matS = -np.sort(-matX, axis=1)
-    matC = np.cumsum(matS, axis=1) - l
-    matH = matS - matC / (np.arange(m) + 1).reshape(1, m, 1)
-    matH[matH <= 0] = np.inf
+    # Compute the cumulative sum of the sorted tensor along the last dimension
+    cumsum_tensor = torch.cumsum(sorted_tensor, dim=1)
 
-    r = np.argmin(matH, axis=1)
-    t = []
-    for task in range(n_tasks):
-        t.append(matC[task, r[task], np.arange(n)] / (r[task] + 1))
-    t = np.stack(t, 0)
-    matY = matX - t[:, None, :]
-    matY[matY < 0] = 0
+    # Create a vector [1/k, ..., 1] for the computation of the threshold
+    k = (
+        torch.arange(
+            1, tensor_reshaped.size(1) + 1, dtype=tensor.dtype, device=tensor.device
+        )
+        .view(1, -1)
+        .to(device)
+    )
 
-    # Back to torch
-    matY = torch.from_numpy(matY).permute(0, 2, 1).to(device)
+    # Compute the threshold t
+    t = (cumsum_tensor - 1) / k
 
-    assert torch.allclose(
-        matY.sum(-1), torch.ones_like(matY.sum(-1))
-    ), "Simplex constraint does not seem satisfied"
+    # Find the last index where sorted_tensor > t
+    mask = sorted_tensor > t
+    rho = torch.sum(mask, dim=1) - 1
 
-    return matY
+    # Gather the threshold theta for each sample in the batch
+    theta = t[torch.arange(t.size(0)), rho]
+
+    # Perform the projection
+    projected_tensor = torch.clamp(tensor_reshaped - theta.view(-1, 1), min=0)
+
+    # Reshape the projected tensor back to the original shape
+    projected_tensor = projected_tensor.view(*shape)
+
+    # assert torch.allclose(
+    #     projected_tensor.sum(-1), torch.ones_like(projected_tensor.sum(-1))
+    # ), "Simplex constraint does not seem satisfied"
+
+    if not torch.allclose(
+        projected_tensor.sum(-1), torch.ones_like(projected_tensor.sum(-1))
+    ):
+        print("Simplex constraint does not seem satisfied")
+        print(tensor)
+        raise ValueError("Simplex constraint does not seem satisfied")
+    return projected_tensor

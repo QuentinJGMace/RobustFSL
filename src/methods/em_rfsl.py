@@ -1,5 +1,6 @@
 from scipy.optimize import fsolve
 import numpy as np
+from collections import defaultdict
 import matplotlib.pyplot as plt
 import time
 import torch
@@ -19,6 +20,7 @@ class EM_RobustPaddle_ID(AbstractMethod):
         self.gamma = args.gamma_prox
         self.kappa = args.kappa
         self.eta = (self.p / self.kappa) ** (1 / self.p)
+        self.auto_init = args.auto_init  # auto init of hyperparams
         self.zeta1 = args.zeta1
         self.zeta2 = args.zeta2
         self.zeta3 = args.omega1 * self.zeta1
@@ -55,6 +57,26 @@ class EM_RobustPaddle_ID(AbstractMethod):
         weights = y_s.transpose(1, 2).matmul(support)
 
         return (weights / counts).to(self.device)
+
+    def init_hyperparams(self, samples):
+        """
+        Initializes the hyperparameters
+
+        Args:
+            samples : torch.Tensor of shape [n_tasks, n_sample, feature_dim]
+        """
+        n_tasks, n_sample, feature_dim = samples.size()
+        normay = torch.sqrt(torch.median(torch.sum(samples**2, dim=2)))
+        NoL2 = (
+            ((torch.linalg.matrix_norm(samples, ord=2)).mean()) ** 2 / (normay**2)
+            + n_sample
+            + 1
+        )
+        self.gamma = (1 / torch.sqrt(NoL2)).cpu().item()
+        self.zeta1 = (0.95 / (NoL2 * self.gamma)).cpu().item()
+        self.zeta3 = (NoL2 * self.zeta1 / 2).cpu().item()
+        self.zeta4 = self.zeta3
+        self.zeta2 = 0.1 * 0.95 / self.gamma
 
     def init_params(self, support, y_s, query):
         """
@@ -226,8 +248,15 @@ class EM_RobustPaddle_ID(AbstractMethod):
 
         all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
 
+        # Init primal_dual params
+        if self.auto_init:
+            self.init_hyperparams(all_samples)
+
         for i in tqdm(range(self.n_iter)):
             old_proto = self.prototypes.clone()
+            old_theta = self.theta.clone()
+            old_class_prop = self.class_prop.clone()
+
             # E-step
             # Computes the responsabilities on the query set
             responsabilities_query = self.compute_responsabilities(
@@ -250,7 +279,7 @@ class EM_RobustPaddle_ID(AbstractMethod):
 
             t_end = time.time()
             # TODO: Rewrite to get criterions
-            criterions = (self.prototypes - old_proto).norm(dim=-1).mean(-1)
+            criterions = self.get_criterions(old_proto, old_theta, old_class_prop)
             self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 
         preds_q = self.predict(all_samples[:, n_support:])
@@ -279,8 +308,8 @@ class EM_RobustPaddle_ID(AbstractMethod):
         dual_theta_2 = torch.ones(n_tasks, n_sample, self.n_class).to(self.device)
 
         pow_weights = torch.pow(weights, 1 / self.beta)
-        crit_list = []
-        for j in range(self.args.n_iter_prox):
+        crit_list = defaultdict(list)
+        for j in tqdm(range(self.args.n_iter_prox)):
             old_theta, old_proto = self.theta.clone(), self.prototypes.clone()
             self.prototypes = self.prototypes + self.gamma * self.zeta1 * (
                 pow_weights.unsqueeze(-1) * dual_u
@@ -295,7 +324,9 @@ class EM_RobustPaddle_ID(AbstractMethod):
             theta_tilde = 2 * self.theta - old_theta
             proto_tilde = 2 * self.prototypes - old_proto
 
-            arg_prox_1 = dual_u + samples.unsqueeze(2) - proto_tilde.unsqueeze(1)
+            arg_prox_1 = dual_u + pow_weights.unsqueeze(-1) * (
+                samples.unsqueeze(2) - proto_tilde.unsqueeze(1)
+            )
             arg_prox_2 = dual_theta_1 + theta_tilde
 
             prox_phi = self.prox_phi(
@@ -309,9 +340,29 @@ class EM_RobustPaddle_ID(AbstractMethod):
                 arg_prox_theta_2, 1 / ((self.eta**self.p) * self.zeta4)
             )
 
-            crit = (self.theta - old_theta).norm()
-            crit2 = (self.prototypes - old_proto).norm()
-            crit_list.append((crit, crit2))
+            crit = (self.theta - old_theta).norm(dim=(1, 2), p=2).mean().cpu().item()
+            crit2 = (
+                (self.prototypes - old_proto).norm(dim=(1, 2), p=2).mean().cpu().item()
+            )
+            crit_list["proto"].append(crit2)
+            crit_list["theta"].append(crit)
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(
+            [i for i in range(self.args.n_iter_prox)],
+            [c for c in crit_list["theta"]],
+            label="theta",
+        )
+        plt.plot(
+            [i for i in range(self.args.n_iter_prox)],
+            [c for c in crit_list["proto"]],
+            label="proto",
+        )
+
+        plt.legend()
+        # logscale in y
+        plt.yscale("log")
+        plt.savefig(f"convergence/{int(torch.rand(1).item()*255)}.png")
 
         if self.prototypes.isnan().all():
             raise ValueError("Nan values in prototypes")
@@ -496,3 +547,28 @@ class EM_RobustPaddle_ID(AbstractMethod):
         new_u = u - (mult * (sol_persp.unsqueeze(-1)) * u) / norm_u.unsqueeze(-1)
         new_chi = chi + (mult * rho / beta_star) * torch.pow(sol_persp, beta_star)
         return (new_u, new_chi)
+
+    def get_criterions(self, old_proto, old_theta, old_class_prop):
+        """
+        Computes the criterions
+
+        Args:
+            old_proto : torch.Tensor of shape [n_tasks, n_class, feature_dim]
+            old_theta : torch.Tensor of shape [n_tasks, n_sample, n_class]
+            old_class_prop : torch.Tensor of shape [n_tasks, n_class]
+
+        Returns:
+            dict
+        """
+        with torch.no_grad():
+            crit_proto = (self.prototypes - old_proto).norm(dim=[1, 2]).mean().item()
+            crit_theta = (self.theta - old_theta).norm(dim=[1, 2]).mean().item()
+            crit_class_prop = (
+                (self.class_prop - old_class_prop).norm(dim=1).mean().item()
+            )
+
+        return {
+            "proto": crit_proto,
+            "theta": crit_theta,
+            "class_prop": crit_class_prop,
+        }
