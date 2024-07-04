@@ -61,16 +61,6 @@ class KM(AbstractMethod):
         accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
         self.test_acc.append(accuracy)
 
-    def get_logs(self):
-
-        self.criterions = torch.stack(self.criterions, dim=0).cpu().numpy()
-        self.test_acc = torch.cat(self.test_acc, dim=1).cpu().numpy()
-        return {
-            "timestamps": self.timestamps,
-            "criterions": self.criterions,
-            "acc": self.test_acc,
-        }
-
     def run_task(self, task_dic, shot):
         """
         inputs:
@@ -101,3 +91,20 @@ class KM(AbstractMethod):
         logs = self.get_logs()
 
         return logs
+
+    def get_criterions(self, w_old, u_old):
+        """
+        Returns the criterions
+        inputs:
+            w_old : torch.Tensor of shape [n_task, num_class, feature_dim]
+            u_old : torch.Tensor of shape [n_task, n_query, n_class]
+        outputs:
+            criterions : torch.Tensor of shape [n_task]
+        """
+        with torch.no_grad():
+            crit_prot = torch.norm(self.w - w_old, dim=(-1, -2)).mean().item()
+            crit_u = torch.norm(self.u - u_old, dim=(-1, -2)).mean().item()
+        return {
+            "crit_prot": crit_prot,
+            "crit_u": crit_u,
+        }

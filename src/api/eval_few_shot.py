@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -142,7 +143,7 @@ class Evaluator_few_shot:
             backbone, features_support, labels_support, features_query, labels_query
         )
 
-        self.report_results(mean_accuracies, mean_times, mean_criterions)
+        self.report_results(mean_accuracies, mean_times)
 
         if return_results:
             return {
@@ -230,7 +231,7 @@ class Evaluator_few_shot:
 
         results_task = []
         results_task_time = []
-        results_criterion = []
+        results_criterion = defaultdict(lambda: [])
 
         # Evaluation over each task
         for i in wrap_tqdm(
@@ -314,14 +315,17 @@ class Evaluator_few_shot:
             timestamps, criterions = logs["timestamps"], logs["criterions"]
             results_task.append(acc_mean)
             results_task_time.append(timestamps)
-            results_criterion.append(criterions)
+            for key in criterions.keys():
+                results_criterion[key].append(criterions[key])
 
             del method
             del tasks
 
         mean_accuracies = np.mean(np.asarray(results_task))
         mean_times = np.mean(np.asarray(results_task_time))
-        mean_criterions = np.mean(np.asarray(results_criterion))
+        mean_criterions = {}
+        for key in results_criterion.keys():
+            mean_criterions[key] = np.mean(results_criterion[key], axis=0)
 
         return mean_accuracies, mean_times, mean_criterions
 
@@ -330,7 +334,7 @@ class Evaluator_few_shot:
         if self.args.name_method == "RPADDLE":
             self.val_param = self.args.lambd
 
-    def report_results(self, mean_accuracies, mean_times, mean_criterions):
+    def report_results(self, mean_accuracies, mean_times):
         """
         Reports the results of the evaluation
 
@@ -408,11 +412,6 @@ class Evaluator_few_shot:
                     self.args.shots, self.args.number_tasks, mean_times
                 )
             )
-            self.logger.info(
-                "{}-shot mean criterion over {} tasks: {}".format(
-                    self.args.shots, self.args.number_tasks, mean_criterions
-                )
-            )
             f.write(str(var) + "\t")
             f.write(str(round(100 * mean_accuracies, 1)) + "\t")
             f.write("\n")
@@ -427,10 +426,5 @@ class Evaluator_few_shot:
             self.logger.info(
                 "{}-shot mean time over {} tasks: {}".format(
                     self.args.shots, self.args.number_tasks, mean_times
-                )
-            )
-            self.logger.info(
-                "{}-shot mean criterion over {} tasks: {}".format(
-                    self.args.shots, self.args.number_tasks, mean_criterions
                 )
             )

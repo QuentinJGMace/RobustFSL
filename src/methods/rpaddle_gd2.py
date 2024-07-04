@@ -1,5 +1,7 @@
+"""Rapaddle implementation with SGD, theta also varies on the support set contrary to the original implementation"""
 import time
 
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -7,7 +9,7 @@ from src.methods.utils import get_one_hot, simplex_project
 from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 
 
-class MutlNoisePaddle_GD(AbstractMethod):
+class MutlNoisePaddle_GD2(AbstractMethod):
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.lambd = args.lambd
@@ -15,7 +17,8 @@ class MutlNoisePaddle_GD(AbstractMethod):
         self.beta = args.beta
         self.kappa = args.kappa
         self.id_cov = args.id_cov
-        self.eta = (2 / self.kappa) ** (1 / 2)
+        self.alpha = args.p
+        self.eta = (self.alpha / self.kappa) ** (1 / self.alpha)
         self.init_info_lists()
 
     def init_prototypes(self, support, y_s):
@@ -41,10 +44,13 @@ class MutlNoisePaddle_GD(AbstractMethod):
             y_s : torch.Tensor of shape [n_task, shot]
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
         """
-        n_tasks, n_sample, feature_dim = query.size()
+        n_tasks, n_query, feature_dim = query.size()
+        _, n_support, _ = support.size()
 
         self.init_prototypes(support, y_s)
-        self.theta = torch.nn.Parameter(torch.ones(n_tasks, n_sample).to(self.device))
+        self.theta = torch.nn.Parameter(
+            torch.ones(n_tasks, n_query + n_support).to(self.device)
+        )
         # self.q strores the n_class covariances
         self.q = torch.nn.Parameter(
             (
@@ -93,7 +99,7 @@ class MutlNoisePaddle_GD(AbstractMethod):
         n_tasks, n_query = samples.size(0), samples.size(1)
         # logits for sample n and class k is -1/2 (x_n - prototype_k)^T* (theta_n*Q_k)^2 * (x_n - prototype_k)
 
-        dist = self.compute_mahalanobis(samples, self.theta)
+        dist = self.compute_mahalanobis(samples, self.theta[:, -n_query:])
         logits = -1 / 2 * dist
 
         return logits
@@ -133,11 +139,15 @@ class MutlNoisePaddle_GD(AbstractMethod):
         # Run adaptation
         self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
 
+        # print(self.q[0, 0].diag())
+        # print("----------------------------")
+        # print(self.theta)
+
         # Extract adaptation logs
         logs = self.get_logs()
 
-        if self.args.plot:
-            self.plot_convergence()
+        # if self.args.plot:
+        #     self.plot_convergence()
 
         return logs
 
@@ -157,7 +167,7 @@ class MutlNoisePaddle_GD(AbstractMethod):
         y_s_one_hot = F.one_hot(y_s, self.n_class).to(self.device)
 
         self.init_params(support, y_s, query)
-        optimizer = torch.optim.SGD(
+        optimizer = torch.optim.AdamW(
             [self.prototypes, self.theta, self.u, self.q], lr=self.lr
         )
 
@@ -165,17 +175,19 @@ class MutlNoisePaddle_GD(AbstractMethod):
         theta_support = torch.ones(support.size(0), support.size(1)).to(self.device)
 
         feature_dim = all_samples.size(-1)
+
+        losses = []
         for i in tqdm(range(self.n_iter)):
 
-            prototypes_old = self.prototypes.clone()
-            theta_old = self.theta.clone()
-            q_old = self.q.clone()
-            u_old = self.u.clone()
+            prototypes_old = self.prototypes.detach().clone()
+            theta_old = self.theta.detach().clone()
+            q_old = self.q.detach().clone()
+            u_old = self.u.detach().clone()
             t0 = time.time()
-            all_theta = torch.cat([theta_support, self.theta], 1)
+            # all_theta = torch.cat([theta_support, self.theta], 1)
 
             # Data fitting term
-            distances = self.compute_mahalanobis(all_samples, all_theta)
+            distances = self.compute_mahalanobis(all_samples, self.theta)
             all_p = torch.cat([y_s_one_hot.float(), self.u.float()], dim=1)
 
             data_fitting = (
@@ -187,7 +199,8 @@ class MutlNoisePaddle_GD(AbstractMethod):
                 feature_dim * (1 - 1 / self.beta) - self.kappa
             ) * torch.log(self.theta + 1e-12).sum(1).mean(0)
             l2_theta = (
-                1 / self.eta * (self.theta.norm(dim=-1, keepdim=False)) ** 2
+                ((1 / self.eta) ** self.alpha)
+                * (self.theta.norm(dim=-1, keepdim=False, p=self.alpha)) ** self.alpha
             ).mean(0)
 
             theta_term = sum_log_theta + l2_theta
@@ -208,21 +221,29 @@ class MutlNoisePaddle_GD(AbstractMethod):
             )
 
             # enthropic barrier
-            ent_barrier = (self.u * torch.log(self.u + 1e-12)).sum(-1).sum(-1).mean(0)
+            # ent_barrier = (self.u * torch.log(self.u + 1e-12)).sum(-1).sum(-1).mean(0)
 
             # final loss
             loss = (
                 data_fitting
                 - self.lambd * partition_complexity
                 + theta_term
-                - q_term
-                + ent_barrier  # - self.lambd * partition_complexity + theta_term - q_term
+                # - q_term
+                # + ent_barrier  # - self.lambd * partition_complexity + theta_term - q_term
             )
 
             # Backward pass
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            losses.append(loss.item())
+
+            # print((prototypes_old - self.prototypes).norm(dim=-1))
+            # print((theta_old - self.theta).norm(dim=-1))
+            # print((q_old - self.q).norm(dim=-1))
+            # print((u_old - self.u).norm(dim=-1))
+            # print('----------------------------')
             # Projection into simplex
             with torch.no_grad():
                 self.u.data = simplex_project(self.u, device=self.device)
@@ -231,6 +252,8 @@ class MutlNoisePaddle_GD(AbstractMethod):
             criterions = self.get_criterions(prototypes_old, q_old, theta_old, u_old)
             self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 
+        # plt.plot(losses)
+        # plt.savefig("losses.png")
         self.record_acc(y_q=y_q)
 
     def get_criterions(self, old_proto, old_cov, old_theta, old_u):
@@ -258,7 +281,7 @@ class MutlNoisePaddle_GD(AbstractMethod):
         }
 
 
-class MutlNoisePaddle_GD_id(AbstractMethod):
+class MutlNoisePaddle_GD_id2(AbstractMethod):
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.lambd = args.lambd
@@ -292,10 +315,13 @@ class MutlNoisePaddle_GD_id(AbstractMethod):
             y_s : torch.Tensor of shape [n_task, shot]
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
         """
-        n_tasks, n_sample, feature_dim = query.size()
+        n_tasks, n_query, feature_dim = query.size()
+        _, n_support, _ = support.size()
 
         self.init_prototypes(support, y_s)
-        self.theta = torch.nn.Parameter(torch.ones(n_tasks, n_sample).to(self.device))
+        self.theta = torch.nn.Parameter(
+            torch.ones(n_tasks, n_support + n_query).to(self.device)
+        )
         self.u = torch.nn.Parameter(
             (self.get_logits(query)).softmax(-1).to(self.device)
         )
@@ -333,7 +359,7 @@ class MutlNoisePaddle_GD_id(AbstractMethod):
         n_tasks, n_query = samples.size(0), samples.size(1)
         # logits for sample n and class k is -1/2 (x_n - prototype_k)^T* (theta_n*Q_k)^2 * (x_n - prototype_k)
 
-        dist = self.compute_mahalanobis(samples, self.theta)
+        dist = self.compute_mahalanobis(samples, self.theta[:, -n_query:])
         logits = -1 / 2 * dist
 
         return logits
@@ -397,7 +423,6 @@ class MutlNoisePaddle_GD_id(AbstractMethod):
         optimizer = torch.optim.SGD([self.prototypes, self.theta, self.u], lr=self.lr)
 
         all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
-        theta_support = torch.ones(support.size(0), support.size(1)).to(self.device)
 
         feature_dim = all_samples.size(-1)
         for i in tqdm(range(self.n_iter)):
@@ -406,10 +431,9 @@ class MutlNoisePaddle_GD_id(AbstractMethod):
             theta_old = self.theta.clone()
             u_old = self.u.clone()
             t0 = time.time()
-            all_theta = torch.cat([theta_support, self.theta], 1)
 
             # Data fitting term
-            distances = self.compute_mahalanobis(all_samples, all_theta)
+            distances = self.compute_mahalanobis(all_samples, self.theta)
             all_p = torch.cat([y_s_one_hot.float(), self.u.float()], dim=1)
 
             data_fitting = (

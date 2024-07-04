@@ -34,16 +34,17 @@ class Paddle_GD(KM):
         self.init_w(support, y_s)
         # Initialize the soft labels u and the prototypes w
         self.u = (self.get_logits(query)).softmax(-1).to(self.device)
+        self.cov = torch.eye(self.feature_dim).to(self.device)
         self.u.requires_grad_()
         self.w.requires_grad_()
+        self.cov.requires_grad_()
         optimizer = torch.optim.Adam([self.w, self.u], lr=self.lr)
 
         all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
 
         for i in tqdm(range(self.n_iter)):
 
-            w_old = self.w.clone()
-            u_old = self.u.clone()
+            w_old = self.w.detach()
             t0 = time.time()
 
             # Data fitting term
@@ -68,9 +69,10 @@ class Paddle_GD(KM):
             # Projection
             with torch.no_grad():
                 self.u = simplex_project(self.u, device=self.device)
+                weight_diff = (w_old - self.w).norm(dim=-1).mean(-1)
+                criterions = weight_diff
 
             t1 = time.time()
-            criterions = self.get_criterions(w_old, u_old)
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.record_acc(y_q=y_q)
