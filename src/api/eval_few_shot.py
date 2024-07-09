@@ -2,6 +2,7 @@ import os
 from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 
 # import utils and datasets
@@ -27,6 +28,10 @@ class Evaluator_few_shot:
     def __init__(self, device, args, log_file, logger, disable_tqdm=False):
         self.device = device
         self.args = args
+        self.save_mult_outlier_distrib = args.save_mult_outlier
+        if self.save_mult_outlier_distrib:
+            self.true_mults = {"support": [], "query": []}
+            self.pred_mults = {"support": [], "query": []}
         self.log_file = log_file
         self.logger = logger
         # self.logger = Logger(__name__, log_file)
@@ -158,8 +163,37 @@ class Evaluator_few_shot:
         """
         raise NotImplementedError("Optimal parameter setting not implemented yet")
 
+    def save_mult(self, mult, is_support, is_true):
+        """Save the mults distrib used for outlier generation
+
+        Args :
+            mult : the mults used for outlier generation shape (n_outliers, 1)
+            is_support : if the mults are used for support or query set
+            is_true: if the mults are the true mults or the predicted ones
+        """
+        path = "results_few_shot/{}/{}".format(
+            self.args.used_test_set, self.args.dataset
+        )
+
+        set_name = "support" if is_support else "query"
+        pred_name = "predicted" if not is_true else "true"
+        filename = os.path.join(path, f"{pred_name}_mult_{set_name}.png")
+
+        n_outliers = mult.shape[0]
+
+        plt.figure()
+        plt.hist(mult[:, 0].cpu().numpy(), bins=50)
+        plt.title(
+            f"{pred_name} mults distribution for {n_outliers} outliers in {set_name} set"
+        )
+        plt.xlabel("Mult")
+        plt.ylabel("Count")
+        plt.savefig(filename)
+
     # TODO : improve, add feature from completely different image, switch labels
-    def generate_outliers(self, all_features, all_labels, indices, n_outliers=0):
+    def generate_outliers(
+        self, all_features, all_labels, indices, n_outliers=0, is_support=False
+    ):
         """
         Randomly generates outliers for the given features and labels.
 
@@ -198,12 +232,14 @@ class Evaluator_few_shot:
         # new_features[mask_outliers] = torch.zeros_like(
         #     all_features[indices[mask_outliers]]
         # )
-        new_features[mask_outliers] = (
-            5
-            * torch.abs(torch.randn((n_outliers, 1), device=all_features.device))
-            * all_features[indices[mask_outliers]]
-        )
+        mult = 4 * torch.rand((n_outliers, 1), device=all_features.device) + 1
+        new_features[mask_outliers] = mult * all_features[indices[mask_outliers]]
         new_features[~mask_outliers] = all_features[indices[~mask_outliers]]
+
+        if self.save_mult_outlier_distrib and is_support:
+            self.true_mults["support"].append(mult)
+        elif self.save_mult_outlier_distrib and not is_support:
+            self.true_mults["query"].append(mult)
 
         return new_features, new_labels, indices_outliers
 
@@ -266,6 +302,7 @@ class Evaluator_few_shot:
                     labels_support,
                     indices_support,
                     self.args.n_outliers_support,
+                    is_support=True,
                 )
                 test_loader_support.append((new_features_s, new_labels_s))
                 (
@@ -277,6 +314,7 @@ class Evaluator_few_shot:
                     labels_query,
                     indices_query,
                     self.args.n_outliers_query,
+                    is_support=False,
                 )
                 test_loader_query.append((new_features_q, new_labels_q))
                 list_indices_query.append(indices_query)
@@ -311,6 +349,12 @@ class Evaluator_few_shot:
 
             # Run task
             logs = method.run_task(task_dic=tasks, shot=self.args.shots)
+
+            if self.save_mult_outlier_distrib and hasattr(method, "mults"):
+                if "support" in method.mults:
+                    self.pred_mults["support"].append(method.mults["support"].detach())
+                self.pred_mults["query"].append(method.mults["query"].detach())
+
             acc_mean, acc_conf = compute_confidence_interval(logs["acc"][:, -1])
             timestamps, criterions = logs["timestamps"], logs["criterions"]
             results_task.append(acc_mean)
@@ -320,6 +364,26 @@ class Evaluator_few_shot:
 
             del method
             del tasks
+
+        if self.save_mult_outlier_distrib:
+            if len(self.true_mults["support"]) > 0:
+                self.true_mults["support"] = torch.cat(self.true_mults["support"])
+                self.save_mult(
+                    self.true_mults["support"], is_support=True, is_true=True
+                )
+                if len(self.pred_mults["support"]) > 0:
+                    self.pred_mults["support"] = torch.cat(self.pred_mults["support"])
+                    self.save_mult(
+                        self.pred_mults["support"], is_support=True, is_true=False
+                    )
+            if len(self.true_mults["query"]) > 0:
+                self.true_mults["query"] = torch.cat(self.true_mults["query"])
+                self.save_mult(self.true_mults["query"], is_support=False, is_true=True)
+                if len(self.pred_mults["query"]) > 0:
+                    self.pred_mults["query"] = torch.cat(self.pred_mults["query"])
+                    self.save_mult(
+                        self.pred_mults["query"], is_support=True, is_true=False
+                    )
 
         mean_accuracies = np.mean(np.asarray(results_task))
         mean_times = np.mean(np.asarray(results_task_time))

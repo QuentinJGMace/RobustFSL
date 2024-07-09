@@ -37,6 +37,7 @@ class Experiment:
 
     def init_run(self):
         self.logger.info("Starting experiment")
+        self.logger.info(f"Base config : \n {self.args}")
         self.device = torch.device("cuda" if self.args.cuda else "cpu")
 
         if self.args.seed != -1:
@@ -102,34 +103,63 @@ class Experiment:
 
 if __name__ == "__main__":
     args = parse_args()
-    fig, ax = plt.subplots(1, 1)
-    variable_param_dict_support = {
-        "shots": [5],
-        "n_outliers_support": [i for i in range(0, 101, 5)],
-    }
-    experiment_support = Experiment(args, variable_param_dict_support)
-    results_support, params_tested_support = experiment_support.run()
-    fig, ax = plot_evolution_with_param(
-        param_sets=params_tested_support,
-        results=results_support,
-        param_name="n_outliers_support",
-        fig=fig,
-        ax=ax,
+    # fig, ax = plt.subplots(1, 1)
+
+    experiment_dicts = []
+    experiment_dicts.append(
+        {
+            "shots": [5],
+            "n_outliers_support": [i for i in range(0, 101, 20)],
+        }
+    )
+    experiment_dicts.append(
+        {
+            "shots": [5],
+            # "n_outliers_support": [0],  # We keep the same number of outliers in the support set
+            "n_outliers_query": [i for i in range(0, 76, 7)],
+        }
+    )
+    experiment_dicts.append(
+        {
+            "shots": [10],
+            "n_outliers_support": [i for i in range(0, 201, 20)],
+        }
+    )
+    experiment_dicts.append(
+        {
+            "shots": [10],
+            "n_outliers_query": [i for i in range(0, 76, 7)],
+        }
+    )
+    experiment_dicts.append(
+        {
+            "shots": [20],
+            "n_outliers_support": [i for i in range(0, 401, 40)],
+        }
+    )
+    experiment_dicts.append(
+        {
+            "shots": [20],
+            "n_outliers_query": [i for i in range(0, 76, 7)],
+        }
     )
 
-    variable_param_dict_query = {
-        "shots": [5],
-        # "n_outliers_support": [0],  # We keep the same number of outliers in the support set
-        "n_outliers_query": [i for i in range(0, 76, 5)],
-    }
-    experiment_query = Experiment(args, variable_param_dict_query)
-    results_query, params_tested_query = experiment_query.run()
-    fig, ax = plot_evolution_with_param(
-        param_sets=params_tested_query,
-        results=results_query,
-        param_name="n_outliers_query",
-        fig=fig,
-        ax=ax,
-    )
-    # Saves the figure
-    fig.savefig("evolution_outlier_rpaddle_rand.png")
+    for dico in experiment_dicts:
+        experiment_query = Experiment(args, dico)
+        results, params_tested = experiment_query.run()
+    # fig, ax = plot_evolution_with_param(
+    #     param_sets=params_tested_support,
+    #     results=results_support,
+    #     param_name="n_outliers_support",
+    #     fig=fig,
+    #     ax=ax,
+    # )
+    # fig, ax = plot_evolution_with_param(
+    #     param_sets=params_tested_query,
+    #     results=results_query,
+    #     param_name="n_outliers_query",
+    #     fig=fig,
+    #     ax=ax,
+    # )
+    # # Saves the figure
+    # fig.savefig("plots/evolution_outlier_paddle_5_shot.png")

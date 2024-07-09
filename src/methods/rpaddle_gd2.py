@@ -1,4 +1,5 @@
 """Rapaddle implementation with SGD, theta also varies on the support set contrary to the original implementation"""
+
 import time
 
 import matplotlib.pyplot as plt
@@ -145,6 +146,15 @@ class MutlNoisePaddle_GD2(AbstractMethod):
 
         # Extract adaptation logs
         logs = self.get_logs()
+
+        # Stores mults
+        if self.args.save_mult_outlier:
+            self.mults = {}
+            tau = self.theta ** (self.beta / (self.beta - 1))
+            self.mults["support"] = tau[:, : support.size(1)]
+            self.mults["query"] = tau[:, support.size(1) :]
+
+            print(torch.max(self.theta))
 
         # if self.args.plot:
         #     self.plot_convergence()
@@ -398,6 +408,22 @@ class MutlNoisePaddle_GD_id2(AbstractMethod):
 
         # Run adaptation
         self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
+
+        # Stores mults
+        if self.args.save_mult_outlier:
+            self.mults = {}
+            tau = self.theta ** (self.beta / (self.beta - 1))
+            self.mults["support"] = tau[:, : support.size(1)]
+            self.mults["query"] = tau[:, support.size(1) :]
+
+            print(
+                torch.max(tau[:, : support.size(1)]),
+                torch.min(tau[:, : support.size(1)]),
+            )
+            print(
+                torch.max(tau[:, support.size(1) :]),
+                torch.min(tau[:, support.size(1) :]),
+            )
 
         # Extract adaptation logs
         logs = self.get_logs()

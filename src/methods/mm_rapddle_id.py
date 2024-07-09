@@ -222,6 +222,15 @@ class MM_PADDLE_id(AbstractMethod):
         # Run adaptation
         self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
 
+        # Stores mults
+        if self.args.save_mult_outlier:
+            self.mults = {}
+            tau = self.theta ** (self.beta / (self.beta - 1))
+            self.mults["support"] = tau[:, : support.size(1)]
+            self.mults["query"] = tau[:, support.size(1) :]
+
+            print(torch.max(self.theta))
+
         # Extract adaptation logs
         logs = self.get_logs()
 
