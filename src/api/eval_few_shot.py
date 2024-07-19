@@ -131,8 +131,10 @@ class Evaluator_few_shot:
         # Init dataset and data loaders
         dataset = DATASET_LIST[self.args.dataset](self.args.dataset_path)
         self.args.classnames = dataset.classnames
-        data_loaders = self.initialize_data_loaders(dataset, preprocess)
-
+        try:
+            data_loaders = self.initialize_data_loaders(dataset, preprocess)
+        except TypeError: # Hack in order to allow synthetic data loading
+            data_loaders = None
         # Extract and load features (load them if already precomputed)
         (
             extracted_features_dic_support,
