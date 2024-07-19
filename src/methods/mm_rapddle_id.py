@@ -3,7 +3,7 @@ import time
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-from src.methods.utils import get_one_hot, simplex_project
+from src.methods.utils import get_one_hot, simplex_project, Glasso_cov_estimate
 from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 
 
@@ -14,8 +14,13 @@ class MM_PADDLE_id(AbstractMethod):
         self.lr = args.lr
         self.beta = args.beta
         self.kappa = args.kappa
-        self.eta = (2 / self.kappa) ** (1 / 2)
         self.change_theta_reg = args.change_theta_reg
+        if self.kappa != 0:
+            self.eta = (2 / self.kappa) ** (1 / 2)
+        elif self.change_theta_reg:
+            raise ValueError(
+                "Kappa must be different from 0 if change_theta_reg is True"
+            )
         if self.change_theta_reg:
             self.p = args.p
         self.id_cov = True
@@ -229,7 +234,7 @@ class MM_PADDLE_id(AbstractMethod):
             self.mults["support"] = tau[:, : support.size(1)]
             self.mults["query"] = tau[:, support.size(1) :]
 
-            print(torch.max(self.theta))
+            # print("Max theta", torch.max(self.theta), "Min theta", torch.min(self.theta))
 
         # Extract adaptation logs
         logs = self.get_logs()
@@ -297,3 +302,57 @@ class MM_PADDLE_id(AbstractMethod):
             "theta": crit_theta,
             "u": crit_u,
         }
+
+
+class MM_PADDLE_glasso(MM_PADDLE_id):
+    def __init__(self, backbone, device, log_file, args):
+        super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
+
+    def inv_sqrt(self, symmat):
+        """
+        inputs:
+            symmat : torch.Tensor of shape [n_task, feature_dim, feature_dim]
+
+        returns:
+            sqrt : torch.Tensor of shape [n_task, feature_dim, feature_dim]
+        """
+        s, U = torch.linalg.eigh(symmat)
+        sqrt = U @ torch.diag_embed(s ** (-0.5)) @ U.transpose(-1, -2)
+        return sqrt
+
+    def init_params(self, support, y_s, query):
+
+        cov = Glasso_cov_estimate(support, y_s, self.n_class, self.device)
+        self.q = self.inv_sqrt(cov)
+        super().init_params(support, y_s, query)
+
+    def compute_mahalanobis(self, samples, theta):
+        transformed_samples = (
+            self.q.unsqueeze(1) @ samples.unsqueeze(2).unsqueeze(-1)
+        ).squeeze(
+            -1
+        )  # Q_kx_n [n_task, n_sample, n_class, feature_dim]
+        reshaped_theta = theta.unsqueeze(-1)  # theta shape : [n_task, n_sample, 1]
+        # computes the norm of the difference between the samples and the prototypes
+        dist_beta = (transformed_samples - self.prototypes.unsqueeze(1)).norm(
+            dim=-1
+        ) ** self.beta  # ||Q_kx_n - prototype_k||^beta [n_task, n_sample, n_class]
+        dist_beta /= reshaped_theta ** (
+            self.beta - 1
+        )  # ||Q_kx_n - prototype_k||^beta/theta [n_task, n_sample, n_class]
+
+        return dist_beta
+
+    def rho(self, samples):
+        transformed_samples = (
+            self.q.unsqueeze(1) @ samples.unsqueeze(2).unsqueeze(-1)
+        ).squeeze(-1)
+        dist_2 = (transformed_samples - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        return dist_2 + self.eps
+
+    def rho_beta(self, samples):
+        transformed_samples = (
+            self.q.unsqueeze(1) @ samples.unsqueeze(2).unsqueeze(-1)
+        ).squeeze(-1)
+        dist_2 = (transformed_samples - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        return (dist_2 + self.eps) ** self.beta

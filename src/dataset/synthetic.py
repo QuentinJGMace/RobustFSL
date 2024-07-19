@@ -3,8 +3,8 @@ from collections import defaultdict
 
 from src.dataset.base_classes import Datum, DatasetBase
 
-class SyntheticDataset(DatasetBase):
 
+class SyntheticDataset(DatasetBase):
     def __init__(self, root):
 
         self._train_x = None

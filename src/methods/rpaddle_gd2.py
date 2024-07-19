@@ -182,12 +182,11 @@ class MutlNoisePaddle_GD2(AbstractMethod):
         )
 
         all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
-        theta_support = torch.ones(support.size(0), support.size(1)).to(self.device)
 
         feature_dim = all_samples.size(-1)
 
         losses = []
-        for i in tqdm(range(self.n_iter)):
+        for i in range(self.n_iter):
 
             prototypes_old = self.prototypes.detach().clone()
             theta_old = self.theta.detach().clone()
@@ -404,6 +403,8 @@ class MutlNoisePaddle_GD_id2(AbstractMethod):
 
         # Perform normalizations
         scaler = MinMaxScaler(feature_range=(0, 1))
+        # support = F.normalize(support, dim=2).to(self.device)
+        # query = F.normalize(query, dim=2).to(self.device)
         query, support = scaler(query, support)
 
         # Run adaptation
@@ -451,7 +452,8 @@ class MutlNoisePaddle_GD_id2(AbstractMethod):
         all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
 
         feature_dim = all_samples.size(-1)
-        for i in tqdm(range(self.n_iter)):
+        losses = []
+        for i in range(self.n_iter):
 
             prototypes_old = self.prototypes.clone()
             theta_old = self.theta.clone()
@@ -494,6 +496,7 @@ class MutlNoisePaddle_GD_id2(AbstractMethod):
                 + theta_term
                 + ent_barrier  # - self.lambd * partition_complexity + theta_term - q_term
             )
+            losses.append(loss.mean().item())
 
             # Backward pass
             optimizer.zero_grad()

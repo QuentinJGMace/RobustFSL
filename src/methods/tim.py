@@ -1,7 +1,8 @@
 # Adaptation of the publicly available code of the NeurIPS 2020 paper entitled "TIM: Transductive Information Maximization":
 # https://github.com/mboudiaf/TIM
+from collections import defaultdict
 import torch.nn.functional as F
-from src.methods.abstract_method import AbstractMethod
+from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 from src.api.utils import wrap_tqdm
 from src.methods.utils import get_one_hot
 from src.logger import Logger
@@ -23,7 +24,7 @@ class TIM(AbstractMethod):
 
     def init_info_lists(self):
         self.timestamps = []
-        self.criterions = []
+        self.criterions = defaultdict(list)
         self.test_acc = []
         self.losses = []
 
@@ -77,16 +78,6 @@ class TIM(AbstractMethod):
         accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
         self.test_acc.append(accuracy)
 
-    def get_logs(self):
-        self.test_acc = torch.cat(self.test_acc, dim=1).cpu().numpy()
-        self.criterions = torch.stack(self.criterions, dim=0).detach().cpu().numpy()
-        return {
-            "timestamps": self.timestamps,
-            "acc": self.test_acc,
-            "losses": self.losses,
-            "criterions": self.criterions,
-        }
-
     def run_method(self, support, query, y_s, y_q):
         """
         Corresponds to the baseline (no transductive inference = SimpleShot)
@@ -137,6 +128,8 @@ class TIM(AbstractMethod):
         # Perform normalizations required
         support = F.normalize(support, dim=2)
         query = F.normalize(query, dim=2)
+        # scaler = MinMaxScaler(feature_range=(0, 1))
+        # query, support = scaler(query, support)
         support = support.to(self.device)
         query = query.to(self.device)
 
@@ -152,6 +145,21 @@ class TIM(AbstractMethod):
         logs = self.get_logs()
 
         return logs
+
+    def get_criterions(self, old_proto):
+        """
+        inputs:
+            old_prot : torch.Tensor of shape [n_task, num_class, feature_dim]
+
+        returns:
+            criterions : torch.Tensor of shape [n_task]
+        """
+        with torch.no_grad():
+            crit_proto = (self.weights - old_proto).norm(dim=[1, 2]).mean().item()
+
+        return {
+            "proto": crit_proto,
+        }
 
 
 class TIM_GD(TIM):
@@ -205,8 +213,7 @@ class TIM_GD(TIM):
             optimizer.step()
 
             t1 = time.time()
-            weight_diff = (weights_old - self.weights).norm(dim=-1).mean(-1)
-            criterions = weight_diff
+            criterions = self.get_criterions(weights_old)
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.backbone.eval()
@@ -308,8 +315,7 @@ class Alpha_TIM(TIM):
             optimizer.step()
 
             t1 = time.time()
-            weight_diff = (weights_old - self.weights).norm(dim=-1).mean(-1)
-            criterions = weight_diff
+            criterions = self.get_criterions(weights_old)
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.backbone.eval()

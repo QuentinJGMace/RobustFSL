@@ -3,6 +3,7 @@ Abstract class that is used for paddle type methods
 """
 
 import torch
+import torch.nn.functional as F
 from src.methods.utils import get_one_hot
 from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 
@@ -81,6 +82,8 @@ class KM(AbstractMethod):
         y_q = y_q.long().squeeze(2).to(self.device)
 
         # Perform normalizations
+        # support = F.normalize(support, dim=2).to(self.device)
+        # query = F.normalize(query, dim=2).to(self.device)
         scaler = MinMaxScaler(feature_range=(0, 1))
         query, support = scaler(query, support)
 
