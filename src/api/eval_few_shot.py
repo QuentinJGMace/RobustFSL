@@ -21,6 +21,7 @@ from src.api.sampler_few_shot import (
 from src.api.extract_features import extract_features
 from src.dataset import DATASET_LIST
 from src.dataset import build_data_loader
+from src.dataset.gen_outliers import generate_outliers
 from src.methods import get_method_builder
 
 
@@ -133,7 +134,7 @@ class Evaluator_few_shot:
         self.args.classnames = dataset.classnames
         try:
             data_loaders = self.initialize_data_loaders(dataset, preprocess)
-        except TypeError: # Hack in order to allow synthetic data loading
+        except TypeError:  # Hack in order to allow synthetic data loading
             data_loaders = None
         # Extract and load features (load them if already precomputed)
         (
@@ -183,67 +184,14 @@ class Evaluator_few_shot:
 
         n_outliers = mult.shape[0]
 
-        plt.figure()
-        plt.hist(mult[:, 0].cpu().numpy(), bins=50)
-        plt.title(
-            f"{pred_name} mults distribution for {n_outliers} outliers in {set_name} set"
-        )
-        plt.xlabel("Mult")
-        plt.ylabel("Count")
-        plt.savefig(filename)
-
-    # TODO : improve, add feature from completely different image, switch labels
-    def generate_outliers(
-        self, all_features, all_labels, indices, n_outliers=0, is_support=False
-    ):
-        """
-        Randomly generates outliers for the given features and labels.
-
-        Args:
-            all_features : Extracted features for the dataset.
-            all_labels : Labels for the dataset.
-            indices : Indices of the data points that will be taken into the set
-
-        Returns:
-            new_features : Features with outliers.
-            new_labels : Labels with outliers.
-            indices_outliers : Indices of the outliers.
-        """
-        # if no outliers to be added, return the original features and labels
-        if (n_outliers) == 0:
-            return all_features[indices].clone(), all_labels[indices].clone(), []
-
-        # Else chooses random indices and apply transformations
-
-        # init new tensors
-        new_features = torch.zeros_like(all_features[indices])
-        new_labels = all_labels[indices].clone()
-
-        # Select random indices
-        perm = torch.randperm(len(indices))
-        indices_outliers = indices[perm][:n_outliers]
-
-        # Mask for torch magic to optimize runtime
-        mask_outliers = torch.zeros(len(indices), dtype=torch.bool)
-        mask_outliers[perm[:n_outliers]] = True
-
-        # Replace the outliers with random vectors
-        # new_features[mask_outliers] = torch.randn_like(
-        #     all_features[indices[mask_outliers]]
+        # plt.figure()
+        # plt.hist(mult[:, 0].cpu().numpy(), bins=50)
+        # plt.title(
+        #     f"{pred_name} mults distribution for {n_outliers} outliers in {set_name} set"
         # )
-        # new_features[mask_outliers] = torch.zeros_like(
-        #     all_features[indices[mask_outliers]]
-        # )
-        mult = 4 * torch.rand((n_outliers, 1), device=all_features.device) + 1
-        new_features[mask_outliers] = mult * all_features[indices[mask_outliers]]
-        new_features[~mask_outliers] = all_features[indices[~mask_outliers]]
-
-        if self.save_mult_outlier_distrib and is_support:
-            self.true_mults["support"].append(mult)
-        elif self.save_mult_outlier_distrib and not is_support:
-            self.true_mults["query"].append(mult)
-
-        return new_features, new_labels, indices_outliers
+        # plt.xlabel("Mult")
+        # plt.ylabel("Count")
+        # plt.savefig(filename)
 
     def evaluate_tasks(
         self, backbone, features_support, labels_support, features_query, labels_query
@@ -299,31 +247,40 @@ class Evaluator_few_shot:
                     new_features_s,
                     new_labels_s,
                     indices_outliers_s,
-                ) = self.generate_outliers(
+                    mult_s,
+                ) = generate_outliers(
                     features_support,
                     labels_support,
                     indices_support,
                     self.args.n_outliers_support,
+                    outlier_type=self.args.outlier_type,
                     is_support=True,
+                    save_mult_outlier_distrib=self.save_mult_outlier_distrib,
                 )
                 test_loader_support.append((new_features_s, new_labels_s))
                 (
                     new_features_q,
                     new_labels_q,
                     indices_outliers_q,
-                ) = self.generate_outliers(
+                    mult_q,
+                ) = generate_outliers(
                     features_query,
                     labels_query,
                     indices_query,
                     self.args.n_outliers_query,
+                    outlier_type=self.args.outlier_type,
                     is_support=False,
+                    save_mult_outlier_distrib=self.save_mult_outlier_distrib,
                 )
                 test_loader_query.append((new_features_q, new_labels_q))
                 list_indices_query.append(indices_query)
                 list_indices_support.append(indices_support)
                 list_indices_outlier_query.append(indices_outliers_q)
                 list_indices_outlier_support.append(indices_outliers_s)
-
+                if mult_s is not None:
+                    self.true_mults["support"].append(mult_s)
+                if mult_q is not None:
+                    self.true_mults["query"].append(mult_q)
             # Prepare the tasks
             task_generator = Task_Generator_Few_shot(
                 k_eff=self.args.k_eff,
