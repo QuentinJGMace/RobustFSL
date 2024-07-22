@@ -14,7 +14,7 @@ class AbstractMethod(nn.Module):
         super(AbstractMethod, self).__init__()
         self.device = device
         self.n_iter = args.iter
-        self.n_class = args.n_class
+        self.n_class = args.n_class_support
         self.backbone = backbone
         self.log_file = log_file
         self.logger = Logger(__name__, self.log_file)
@@ -62,6 +62,9 @@ class AbstractMethod(nn.Module):
             y_q : torch.Tensor of shape [n_task, n_query] :
         """
         preds_q = self.predict()
+        # print(y_q.cpu().numpy())
+        # print("-----------------")
+        # print(preds_q.cpu().numpy())
         accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
         self.test_acc.append(accuracy)
 

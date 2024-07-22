@@ -14,10 +14,7 @@ from src.api.utils import (
 )
 from src.api.metric_utils import compute_confidence_interval
 from src.api.task_generator_few_shot import Task_Generator_Few_shot
-from src.api.sampler_few_shot import (
-    CategoriesSampler_few_shot,
-    SamplerSupportAndQuery,
-)
+from src.samplers import CategoriesSampler_few_shot, SAMPLERS
 from src.api.extract_features import extract_features
 from src.dataset import DATASET_LIST
 from src.dataset import build_data_loader
@@ -219,6 +216,8 @@ class Evaluator_few_shot:
         results_task_time = []
         results_criterion = defaultdict(lambda: [])
 
+        sampling_method = SAMPLERS[self.args.sampling_method]
+
         # Evaluation over each task
         for i in wrap_tqdm(
             range(int(self.args.number_tasks / self.args.batch_size)),
@@ -233,10 +232,11 @@ class Evaluator_few_shot:
                 self.args.shots,
                 self.args.n_query,
                 force_query_size=True,
+                n_class_support=self.args.n_class_support,
             )
             sampler.create_list_classes(labels_support, labels_query)
 
-            sampler_support_query = SamplerSupportAndQuery(sampler)
+            sampler_support_query = sampling_method(sampler)
 
             test_loader_query, test_loader_support = [], []
             list_indices_support, list_indices_query = [], []
