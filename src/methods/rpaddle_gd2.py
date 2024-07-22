@@ -114,11 +114,6 @@ class MultNoisePaddle_GD2(RPADDLE_base):
 
             losses.append(loss.item())
 
-            # print((prototypes_old - self.prototypes).norm(dim=-1))
-            # print((theta_old - self.theta).norm(dim=-1))
-            # print((q_old - self.q).norm(dim=-1))
-            # print((u_old - self.u).norm(dim=-1))
-            # print('----------------------------')
             # Projection into simplex
             with torch.no_grad():
                 self.u.data = simplex_project(self.u, device=self.device)

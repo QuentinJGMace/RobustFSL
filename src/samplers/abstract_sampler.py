@@ -175,15 +175,4 @@ class AbstractSampler:
                 counter += 1
                 query = self.sample_query(classes_query)
 
-            # print(classes_support, classes_query)
-            # print('--------------------------')
-            # print(support, query)
-            # print('--------------------------')
-            # print([support[i] in ])
-            # possible_indices_support = torch.cat([self.m_ind_support[c] for c in classes_support], dim=0)
-            # print([support[i] in possible_indices_support for i in range(len(support))])
-            # print('--------------------------')
-            # print([query[i] in possible_indices_support for i in range(len(query))])
-            # 1/0
-
             yield support, query
