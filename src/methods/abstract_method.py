@@ -62,19 +62,8 @@ class AbstractMethod(nn.Module):
             y_q : torch.Tensor of shape [n_task, n_query] :
         """
         preds_q = self.predict()
-        # print(y_q.cpu().numpy())
-        # print("-----------------")
-        # print(preds_q.cpu().numpy())
         accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
         self.test_acc.append(accuracy)
-
-    # def record_accuracy(self, acc):
-    #     """
-    #     Records the accuracy
-    #     inputs:
-    #         acc : torch.Tensor of shape [n_task]
-    #     """
-    #     self.test_acc.append(acc)
 
     def get_logs(self):
         """
