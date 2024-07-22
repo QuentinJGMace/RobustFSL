@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 
+"""DEPRECATED SHOULD NOT BE USED"""
+
 
 class CategoriesSampler_few_shot:
     """

@@ -60,8 +60,6 @@ class Task_Generator_Few_shot:
 
         new_data_query = data_query
         new_data_support = data_support
-        new_labels_support = labels_support
-        new_labels_query = labels_query
 
         torch.cuda.empty_cache()
 

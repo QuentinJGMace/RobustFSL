@@ -6,7 +6,6 @@ import numpy as np
 from src.api.utils import wrap_tqdm
 from src.api.metric_utils import get_metric, AverageMeter
 from src.dataset import build_data_loader, DATASET_LIST
-from src.api.sampler_few_shot import CategoriesSampler_few_shot
 
 
 class Trainer:
