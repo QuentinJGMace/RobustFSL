@@ -5,15 +5,13 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from src.methods.utils import get_one_hot, simplex_project, Glasso_cov_estimate
 from src.methods.abstract_method import AbstractMethod, MinMaxScaler
+from src.methods.rpaddle_base import RPADDLE_base
 
 
-class MM_PADDLE_id(AbstractMethod):
+class MM_PADDLE_id(RPADDLE_base):
+
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
-        self.lambd = args.lambd
-        self.lr = args.lr
-        self.beta = args.beta
-        self.kappa = args.kappa
         self.change_theta_reg = args.change_theta_reg
         if self.kappa != 0:
             self.eta = (2 / self.kappa) ** (1 / 2)
@@ -23,82 +21,7 @@ class MM_PADDLE_id(AbstractMethod):
             )
         if self.change_theta_reg:
             self.p = args.p
-        self.id_cov = True
-        self.eps = 1e-6
-        self.init_info_lists()
-
-    def init_prototypes(self, support, y_s):
-        """
-        inputs:
-            support : torch.Tensor of shape [n_task, shot, feature_dim]
-            y_s : torch.Tensor of shape [n_task, shot]
-
-        updates :
-            self.w : torch.Tensor of shape [n_task, num_class, feature_dim]
-        """
-        n_tasks = support.size(0)
-        one_hot = get_one_hot(y_s, self.n_class)
-        counts = one_hot.sum(1).view(n_tasks, -1, 1)
-        weights = one_hot.transpose(1, 2).matmul(support)
-        self.prototypes = weights / counts
-
-    def init_params(self, support, y_s, query):
-        """
-        Initializes the parameters
-        inputs:
-            support : torch.Tensor of shape [n_task, shot, feature_dim]
-            y_s : torch.Tensor of shape [n_task, shot]
-            query : torch.Tensor of shape [n_task, n_query, feature_dim]
-        """
-        n_tasks, n_query, feature_dim = query.size()
-        _, n_support, _ = support.size()
-
-        self.init_prototypes(support, y_s)
-        self.theta = torch.ones(n_tasks, n_query + n_support).to(self.device)
-        self.u = (self.get_logits(query)).softmax(-1).to(self.device)
-
-    def compute_mahalanobis(self, samples, theta):
-        """
-        Computes the Mahalanobis distance between the samples and the prototypes
-        inputs:
-            samples : torch.Tensor of shape [n_task, n_support + n_query, feature_dim]
-        """
-        # Computes the Mahalanobis distance between the samples and the prototypes
-        # [n_task, n_sample, n_class]
-        # self.q : [n_task, 1, n_class, feature_dim, feature_dim]
-        # self.prototypes: [n_task, n_class, feature_dim]
-        # samples : [n_task, n_sample, 1, feature_dim]
-        tranformed_samples = samples.unsqueeze(
-            2
-        )  # Q_kx_n [n_task, n_sample, n_class, feature_dim]
-        reshaped_theta = theta.unsqueeze(-1)  # theta shape : [n_task, n_sample, 1]
-        # computes the norm of the difference between the samples and the prototypes
-        dist_beta = (tranformed_samples - self.prototypes.unsqueeze(1)).norm(
-            dim=-1
-        ) ** self.beta  # ||Q_kx_n - prototype_k||^beta [n_task, n_sample, n_class]
-        dist_beta /= reshaped_theta ** (
-            self.beta - 1
-        )  # ||Q_kx_n - prototype_k||^beta/theta [n_task, n_sample, n_class]
-
-        return dist_beta
-
-    def get_logits(self, samples) -> torch.Tensor:
-        n_tasks, n_query = samples.size(0), samples.size(1)
-        # logits for sample n and class k is -1/2 (x_n - prototype_k)^T* (theta_n*Q_k)^2 * (x_n - prototype_k)
-
-        dist = self.compute_mahalanobis(samples, self.theta[:, -n_query:])
-        logits = -1 / 2 * dist
-
-        return logits
-
-    def predict(self):
-        """
-        returns:
-            preds : torch.Tensor of shape [n_task, n_query]
-        """
-        with torch.no_grad():
-            preds = self.u.argmax(2)
-        return preds
+        self.eps = 1e-12
 
     def rho(self, samples):
         """
@@ -201,46 +124,6 @@ class MM_PADDLE_id(AbstractMethod):
 
         self.prototypes = num / den
 
-    def run_task(self, task_dic, shot):
-        """
-        Fits the model to the support set
-        inputs:
-            task_dic : dict {"x_s": torch.Tensor, "y_s": torch.Tensor, "x_q": torch.Tensor, "y_q": torch.Tensor}
-            shot : int
-        """
-        support, query, y_s, y_q = (
-            task_dic["x_s"],
-            task_dic["x_q"],
-            task_dic["y_s"],
-            task_dic["y_q"],
-        )
-
-        support = support.to(self.device)
-        query = query.to(self.device)
-        y_s = y_s.long().squeeze(2).to(self.device)
-        y_q = y_q.long().squeeze(2).to(self.device)
-
-        # Perform normalizations
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        query, support = scaler(query, support)
-
-        # Run adaptation
-        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
-
-        # Stores mults
-        if self.args.save_mult_outlier:
-            self.mults = {}
-            tau = self.theta ** (self.beta / (self.beta - 1))
-            self.mults["support"] = tau[:, : support.size(1)]
-            self.mults["query"] = tau[:, support.size(1) :]
-
-            # print("Max theta", torch.max(self.theta), "Min theta", torch.min(self.theta))
-
-        # Extract adaptation logs
-        logs = self.get_logs()
-
-        return logs
-
     def run_method(self, support, query, y_s, y_q):
         """
         inputs:
@@ -282,31 +165,11 @@ class MM_PADDLE_id(AbstractMethod):
 
         self.record_acc(y_q=y_q)
 
-    def get_criterions(self, old_proto, old_theta, old_u):
-        """
-        inputs:
-            old_prot : torch.Tensor of shape [n_task, num_class, feature_dim]
-            old_theta : torch.Tensor of shape [n_task, n_sample]
-            old_u: torch.Tensor of shape [n_task, n_query, num_class]
-
-        returns:
-            criterions : torch.Tensor of shape [n_task]
-        """
-        with torch.no_grad():
-            crit_proto = (self.prototypes - old_proto).norm(dim=[1, 2]).mean().item()
-            crit_theta = (self.theta - old_theta).norm(dim=[1]).mean().item()
-            crit_u = (self.u - old_u).norm(dim=[1, 2]).mean().item()
-
-        return {
-            "proto": crit_proto,
-            "theta": crit_theta,
-            "u": crit_u,
-        }
-
 
 class MM_PADDLE_glasso(MM_PADDLE_id):
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
+        self.id_cov = False
 
     def inv_sqrt(self, symmat):
         """
@@ -323,25 +186,8 @@ class MM_PADDLE_glasso(MM_PADDLE_id):
     def init_params(self, support, y_s, query):
 
         cov = Glasso_cov_estimate(support, y_s, self.n_class, self.device)
-        self.q = self.inv_sqrt(cov)
         super().init_params(support, y_s, query)
-
-    def compute_mahalanobis(self, samples, theta):
-        transformed_samples = (
-            self.q.unsqueeze(1) @ samples.unsqueeze(2).unsqueeze(-1)
-        ).squeeze(
-            -1
-        )  # Q_kx_n [n_task, n_sample, n_class, feature_dim]
-        reshaped_theta = theta.unsqueeze(-1)  # theta shape : [n_task, n_sample, 1]
-        # computes the norm of the difference between the samples and the prototypes
-        dist_beta = (transformed_samples - self.prototypes.unsqueeze(1)).norm(
-            dim=-1
-        ) ** self.beta  # ||Q_kx_n - prototype_k||^beta [n_task, n_sample, n_class]
-        dist_beta /= reshaped_theta ** (
-            self.beta - 1
-        )  # ||Q_kx_n - prototype_k||^beta/theta [n_task, n_sample, n_class]
-
-        return dist_beta
+        self.q = self.inv_sqrt(cov)
 
     def rho(self, samples):
         transformed_samples = (
