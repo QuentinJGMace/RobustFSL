@@ -11,6 +11,7 @@ from src.methods.rpaddle_base import RPADDLE_base
 class MultNoisePaddle_GD2(RPADDLE_base):
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
+        self.optimizer = args.optimizer
 
     def init_params(self, support, y_s, query):
         super().init_params(support, y_s, query)
@@ -37,13 +38,14 @@ class MultNoisePaddle_GD2(RPADDLE_base):
 
         self.init_params(support, y_s, query)
         if not self.id_cov:
-            optimizer = torch.optim.SGD(
-                [self.prototypes, self.theta, self.u, self.q], lr=self.lr
-            )
+            learnable_params = [self.prototypes, self.theta, self.u, self.q]
         else:
-            optimizer = torch.optim.SGD(
-                [self.prototypes, self.theta, self.u], lr=self.lr
-            )
+            learnable_params = [self.prototypes, self.theta, self.u]
+
+        if self.optimizer == "adam":
+            optimizer = torch.optim.Adam(learnable_params, lr=self.lr)
+        elif self.optimizer == "sgd":
+            optimizer = torch.optim.SGD(learnable_params, lr=self.lr)
 
         all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
 
@@ -75,7 +77,7 @@ class MultNoisePaddle_GD2(RPADDLE_base):
                 feature_dim * (1 - 1 / self.beta) - self.kappa
             ) * torch.log(self.theta + 1e-12).sum(1).mean(0)
             l2_theta = (
-                (1 / self.eta) * (self.theta.norm(dim=-1, keepdim=False, p=2)) ** 2
+                (1 / self.eta) * ((self.theta).norm(dim=-1, keepdim=False, p=2)) ** 2
             ).mean(0)
 
             theta_term = sum_log_theta + l2_theta

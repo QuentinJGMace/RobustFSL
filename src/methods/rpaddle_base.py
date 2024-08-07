@@ -15,6 +15,7 @@ class RPADDLE_base(AbstractMethod):
         self.beta = args.beta
         self.kappa = args.kappa
         self.id_cov = args.id_cov
+        self.n_support = self.args.shots * self.args.n_class_support
         if self.kappa != 0:
             self.eta = (2 / self.kappa) ** (1 / 2)
         self.init_info_lists()
@@ -99,6 +100,27 @@ class RPADDLE_base(AbstractMethod):
         """
         with torch.no_grad():
             preds = self.u.argmax(2)
+
+            if self.args.save_mult_outlier:
+                self.mults = {}
+                tau = self.theta ** (self.beta / (self.beta - 1))
+                if self.theta.size(1) == self.n_support + self.args.n_query:
+                    self.mults["support"] = tau[:, : self.n_support]
+                    self.mults["query"] = tau[:, self.n_support :]
+                    print(
+                        torch.max(tau[:, : self.n_support]),
+                        torch.min(tau[:, : self.n_support]),
+                    )
+                    print(
+                        torch.max(tau[:, self.n_support :]),
+                        torch.min(tau[:, self.n_support :]),
+                    )
+                else:
+                    self.mults["query"] = tau
+                    print(
+                        torch.max(tau[:, :]),
+                        torch.min(tau[:, :]),
+                    )
         return preds
 
     def run_task(self, task_dic, shot):
