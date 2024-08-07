@@ -8,7 +8,6 @@ from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 
 
 class RPADDLE_base(AbstractMethod):
-
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.lambd = args.lambd
@@ -183,11 +182,21 @@ class RPADDLE_base(AbstractMethod):
                 .mean()
                 .item()
             )
-            crit_theta = (
-                ((self.theta - old_theta).norm(dim=[1]) / old_theta.norm(dim=[1]))
-                .mean()
-                .item()
-            )
+            if self.theta.ndim == 2:
+                crit_theta = (
+                    ((self.theta - old_theta).norm(dim=[1]) / old_theta.norm(dim=[1]))
+                    .mean()
+                    .item()
+                )
+            elif self.theta.ndim == 3:
+                crit_theta = (
+                    (
+                        (self.theta - old_theta).norm(dim=[1, 2])
+                        / old_theta.norm(dim=[1, 2])
+                    )
+                    .mean()
+                    .item()
+                )
             crit_u = (
                 ((self.u - old_u).norm(dim=[1, 2]) / old_u.norm(dim=[1, 2]))
                 .mean()

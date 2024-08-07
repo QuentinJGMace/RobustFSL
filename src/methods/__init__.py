@@ -1,6 +1,8 @@
 from .rpaddle_gd import MutlNoisePaddle_GD
 from .rpaddle_gd2 import MultNoisePaddle_GD2
+from .rpaddle_gd_class import MultNoisePaddle_GD2_class
 from .mm_rapddle_id import MM_PADDLE_id
+from .mm_rpaddle_class import MM_PADDLE_class
 from .em_rfsl import EM_RobustPaddle_ID
 from .em_rfsl_cov import EM_RobustPaddle
 from .paddle import Paddle
@@ -22,8 +24,12 @@ def get_method_builder(backbone, device, args, log_file):
         method_builder = MutlNoisePaddle_GD(**method_info)
     elif args.name_method == "RPADDLE2":
         method_builder = MultNoisePaddle_GD2(**method_info)
+    elif args.name_method == "RPADDLE2_CLASS":
+        method_builder = MultNoisePaddle_GD2_class(**method_info)
     elif args.name_method == "MM_RPADDLE_ID":
         method_builder = MM_PADDLE_id(**method_info)
+    elif args.name_method == "MM_RPADDLE_CLASS":
+        method_builder = MM_PADDLE_class(**method_info)
     elif args.name_method == "PADDLE":
         method_builder = Paddle(**method_info)
     elif args.name_method == "PADDLE_GD":

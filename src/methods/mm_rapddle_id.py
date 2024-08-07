@@ -9,7 +9,6 @@ from src.methods.rpaddle_base import RPADDLE_base
 
 
 class MM_PADDLE_id(RPADDLE_base):
-
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.change_theta_reg = args.change_theta_reg
