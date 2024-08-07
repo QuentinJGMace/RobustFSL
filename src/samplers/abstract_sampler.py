@@ -80,7 +80,6 @@ class CategoriesSampler_few_shot:
 
 
 class AbstractSampler:
-
     def __init__(self, cat_sampler):
         self.n_class = cat_sampler.n_class
         self.n_class_support = cat_sampler.n_class_support

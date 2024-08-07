@@ -277,6 +277,8 @@ class Evaluator_few_shot:
                 list_indices_support.append(indices_support)
                 list_indices_outlier_query.append(indices_outliers_q)
                 list_indices_outlier_support.append(indices_outliers_s)
+                if not self.save_mult_outlier_distrib:
+                    continue
                 if mult_s is not None:
                     self.true_mults["support"].append(mult_s)
                 if mult_q is not None:
