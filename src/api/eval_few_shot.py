@@ -110,11 +110,19 @@ class Evaluator_few_shot:
         filepath_query = os.path.join(
             f"data/{self.args.dataset}/saved_features/{self.args.used_set_query}_features_{self.args.backbone}.pkl"
         )
+        filepath_mean = os.path.join(
+            f"data/{self.args.dataset}/saved_features/train_mean_features_{self.args.backbone}.pkl"
+        )
 
         extracted_features_dic_support = load_pickle(filepath_support)
         extracted_features_dic_query = load_pickle(filepath_query)
+        extracted_features_dic_mean = load_pickle(filepath_mean)
 
-        return extracted_features_dic_support, extracted_features_dic_query
+        return (
+            extracted_features_dic_support,
+            extracted_features_dic_query,
+            extracted_features_dic_mean,
+        )
 
     def run_full_evaluation(self, backbone, preprocess, return_results=False):
         """
@@ -137,15 +145,22 @@ class Evaluator_few_shot:
         (
             extracted_features_dic_support,
             extracted_features_dic_query,
+            extracted_features_dic_mean,
         ) = self.extract_and_load_features(backbone, data_loaders)
         features_support = extracted_features_dic_support["features"]
         labels_support = extracted_features_dic_support["labels"]
         features_query = extracted_features_dic_query["features"]
         labels_query = extracted_features_dic_query["labels"]
+        mean_features = extracted_features_dic_mean["mean_train"]
 
         # Run evaluation for each task and collect results
         mean_accuracies, mean_times, mean_criterions = self.evaluate_tasks(
-            backbone, features_support, labels_support, features_query, labels_query
+            backbone,
+            features_support,
+            labels_support,
+            mean_features,
+            features_query,
+            labels_query,
         )
 
         self.report_results(mean_accuracies, mean_times)
@@ -191,7 +206,13 @@ class Evaluator_few_shot:
         # plt.savefig(filename)
 
     def evaluate_tasks(
-        self, backbone, features_support, labels_support, features_query, labels_query
+        self,
+        backbone,
+        features_support,
+        labels_support,
+        mean_features,
+        features_query,
+        labels_query,
     ):
         """
         Evaluates the method
@@ -291,6 +312,7 @@ class Evaluator_few_shot:
                 n_class=self.args.n_class,
                 loader_support=test_loader_support,
                 loader_query=test_loader_query,
+                data_mean=mean_features,
                 backbone=backbone,
                 args=self.args,
             )

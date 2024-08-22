@@ -58,6 +58,14 @@ def extract_features(args, backbone, data_loader, set_name, device, disable_tqdm
     except:
         pass
 
+    if set_name == "train":
+        # Computes the mean of the features on the training set
+        mean_features = all_features.mean(dim=0)
+        filepath_mean = os.path.join(
+            f"data/{args.dataset}/saved_features/{set_name}_mean_features_{args.backbone}.pkl"
+        )
+        save_pickle(filepath_mean, {"mean_train": mean_features})
+
     filepath = os.path.join(
         f"data/{args.dataset}/saved_features/{set_name}_features_{args.backbone}.pkl"
     )
@@ -102,7 +110,7 @@ if __name__ == "__main__":
 
     dataset = DATASET_LIST[args.dataset](args.dataset_path)
     preprocess_transform = build_transform(
-        size=84, jitter=False, enlarge=args.enlarge, augment=False
+        size=args.input_size, jitter=False, enlarge=args.enlarge, augment=False
     )
     data_loaders = initialize_data_loaders(
         args=args,
@@ -111,9 +119,11 @@ if __name__ == "__main__":
     )
     backbone = get_backbone(args).to(device)
     checkpoint_path = args.ckpt_path
+    print(args.ckpt_path)
+    print(args.backbone)
     print(checkpoint_path)
     load_checkpoint(backbone, checkpoint_path, device, type="best")
-
+    print("LOAD succesfull")
     if not os.path.exists(
         f"data/{args.dataset}/saved_features/train_features_{args.backbone}.pkl"
     ):
