@@ -4,9 +4,11 @@ import shutil
 import torch
 
 from .resnet import resnet18
+from .feat_resnet import feat_resnet12
 
 backbones_dict = {
     "resnet18": resnet18,
+    "feat_resnet12": feat_resnet12,
 }
 
 
@@ -25,10 +27,16 @@ def save_checkpoint(
 
 def load_checkpoint(model, model_path, device, type="best"):
     if type == "best":
-        checkpoint = torch.load(
-            "{}/model_best.pth.tar".format(model_path),
-            map_location=torch.device(device),
-        )
+        if os.path.exists("{}/model_best.pth.tar".format(model_path)):
+            checkpoint = torch.load(
+                "{}/model_best.pth.tar".format(model_path),
+                map_location=torch.device(device),
+            )
+        elif os.path.exists("{}/model_best.pth".format(model_path)):
+            checkpoint = torch.load(
+                "{}/model_best.pth".format(model_path),
+                map_location=torch.device(device),
+            )
     elif type == "last":
         checkpoint = torch.load(
             "{}/checkpoint.pth.tar".format(model_path),
@@ -36,7 +44,10 @@ def load_checkpoint(model, model_path, device, type="best"):
         )
     else:
         assert False, "type should be in [best, or last], but got {}".format(type)
-    state_dict = checkpoint["state_dict"]
+    try:
+        state_dict = checkpoint["state_dict"]
+    except KeyError:
+        state_dict = checkpoint["params"]
     names = []
     for k, v in state_dict.items():
         names.append(k)
@@ -44,9 +55,14 @@ def load_checkpoint(model, model_path, device, type="best"):
         model.load_state_dict(state_dict)
     except RuntimeError:
         new_state_dict = OrderedDict()
+        has_to_be_strict = True
         for k, v in state_dict.items():
             if k.startswith("module."):
                 name = k[7:]
                 new_state_dict[name] = v
-
-        model.load_state_dict(new_state_dict)
+            elif k.startswith("encoder."):
+                name = k[8:]
+                new_state_dict[name] = v
+                # has_to_be_strict = False # no fully connected layer in this checkpoint
+        # print(new_state_dict.keys())
+        model.load_state_dict(new_state_dict, strict=has_to_be_strict)
