@@ -21,6 +21,7 @@ class MM_PADDLE_id(RPADDLE_base):
         if self.change_theta_reg:
             self.p = args.p
         self.eps = 1e-12
+        self.temp = self.args.temp
 
     def rho(self, samples):
         """
@@ -31,7 +32,10 @@ class MM_PADDLE_id(RPADDLE_base):
         Returns:
             rho : torch Tensor of shape (n_task, n_samples, n_class)
         """
-        dist_2 = (samples.unsqueeze(2) - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        dist_2 = (
+            self.temp
+            * (samples.unsqueeze(2) - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        )
         return dist_2 + self.eps
 
     def rho_beta(self, samples):
@@ -43,8 +47,11 @@ class MM_PADDLE_id(RPADDLE_base):
         Returns:
             rho^(beta/2) : torch Tensor of shape (n_task, n_samples, n_class)
         """
-        dist_2 = (samples.unsqueeze(2) - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
-        return (dist_2 + self.eps) ** self.beta
+        dist_2 = (
+            self.temp
+            * (samples.unsqueeze(2) - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        )
+        return (dist_2 + self.eps) ** (self.beta / 2)
 
     def update_u(self, samples_query, class_prop):
         """
@@ -159,6 +166,8 @@ class MM_PADDLE_id(RPADDLE_base):
             self.update_prot(all_samples, all_u)
 
             t_end = time.time()
+            # if i == self.n_iter - 1:
+            #     print(u_old.isnan().any(), self.u.isnan().any())
             criterions = self.get_criterions(prototypes_old, theta_old, u_old)
             self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 

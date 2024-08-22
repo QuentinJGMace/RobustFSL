@@ -101,26 +101,26 @@ class RPADDLE_base(AbstractMethod):
         with torch.no_grad():
             preds = self.u.argmax(2)
 
-            if self.args.save_mult_outlier:
-                self.mults = {}
-                tau = self.theta ** (self.beta / (self.beta - 1))
-                if self.theta.size(1) == self.n_support + self.args.n_query:
-                    self.mults["support"] = tau[:, : self.n_support]
-                    self.mults["query"] = tau[:, self.n_support :]
-                    print(
-                        torch.max(tau[:, : self.n_support]),
-                        torch.min(tau[:, : self.n_support]),
-                    )
-                    print(
-                        torch.max(tau[:, self.n_support :]),
-                        torch.min(tau[:, self.n_support :]),
-                    )
-                else:
-                    self.mults["query"] = tau
-                    print(
-                        torch.max(tau[:, :]),
-                        torch.min(tau[:, :]),
-                    )
+            # if self.args.save_mult_outlier:
+            #     self.mults = {}
+            #     tau = self.theta ** (self.beta / (self.beta - 1))
+            #     if self.theta.size(1) == self.n_support + self.args.n_query:
+            #         self.mults["support"] = tau[:, : self.n_support]
+            #         self.mults["query"] = tau[:, self.n_support :]
+            #         print(
+            #             torch.max(tau[:, : self.n_support]),
+            #             torch.min(tau[:, : self.n_support]),
+            #         )
+            #         print(
+            #             torch.max(tau[:, self.n_support :]),
+            #             torch.min(tau[:, self.n_support :]),
+            #         )
+            #     else:
+            #         self.mults["query"] = tau
+            #         print(
+            #             torch.max(tau[:, :]),
+            #             torch.min(tau[:, :]),
+            #         )
         return preds
 
     def run_task(self, task_dic, shot):
@@ -159,14 +159,41 @@ class RPADDLE_base(AbstractMethod):
             if self.theta.size(1) == support.size(1) + query.size(1):
                 self.mults["support"] = tau[:, : support.size(1)]
                 self.mults["query"] = tau[:, support.size(1) :]
-                print(
-                    torch.max(tau[:, : support.size(1)]),
-                    torch.min(tau[:, : support.size(1)]),
-                )
-                print(
-                    torch.max(tau[:, support.size(1) :]),
-                    torch.min(tau[:, support.size(1) :]),
-                )
+                with open("thetas_mm_no_reg.txt", "a") as f:
+                    f.write(f"N shots : {self.args.shots}" + "\n")
+                    f.write(
+                        f"N outliers support : {self.args.n_outliers_support}, N outliers query : {self.args.n_outliers_query}"
+                        + "\n"
+                    )
+                    f.write(
+                        f"Support mean: {self.theta[:, : support.size(1)].nanmean().item()} Query : {self.theta[:, support.size(1) :].nanmean().item()}"
+                        + "\n"
+                    )
+                    f.write(
+                        f"Support max: {self.theta[:, : support.size(1)][~self.theta[:, : support.size(1)].isnan()].max().item()} Query : {self.theta[:, support.size(1) :][~self.theta[:, support.size(1) :].isnan()].max().item()}"
+                        + "\n"
+                    )
+                    f.write(
+                        f"Support min: {self.theta[:, : support.size(1)][~self.theta[:, : support.size(1)].isnan()].min().item()} Query : {self.theta[:, support.size(1) :][~self.theta[:, support.size(1) :].isnan()].min().item()}"
+                        + "\n"
+                    )
+                    f.write(
+                        f"Number of nans support : {self.theta[:, : support.size(1)].isnan().sum().item()} Query : {self.theta[:, support.size(1) :].isnan().sum().item()}"
+                        + "\n"
+                    )
+                    f.write(
+                        f"Number of infs support : {self.theta[:, : support.size(1)].isinf().sum().item()} Query : {self.theta[:, support.size(1) :].isinf().sum().item()}"
+                        + "\n"
+                    )
+                    f.write("-------------------------------------------" + "\n\n")
+                # print(
+                #     torch.max(tau[:, : support.size(1)]),
+                #     torch.min(tau[:, : support.size(1)]),
+                # )
+                # print(
+                #     torch.max(tau[:, support.size(1) :]),
+                #     torch.min(tau[:, support.size(1) :]),
+                # )
             else:
                 self.mults["query"] = tau
                 print(
@@ -201,13 +228,13 @@ class RPADDLE_base(AbstractMethod):
                     (self.prototypes - old_proto).norm(dim=[1, 2])
                     / old_proto.norm(dim=[1, 2])
                 )
-                .mean()
+                .nanmean()
                 .item()
             )
             if self.theta.ndim == 2:
                 crit_theta = (
                     ((self.theta - old_theta).norm(dim=[1]) / old_theta.norm(dim=[1]))
-                    .mean()
+                    .nanmean()
                     .item()
                 )
             elif self.theta.ndim == 3:
@@ -216,12 +243,12 @@ class RPADDLE_base(AbstractMethod):
                         (self.theta - old_theta).norm(dim=[1, 2])
                         / old_theta.norm(dim=[1, 2])
                     )
-                    .mean()
+                    .nanmean()
                     .item()
                 )
             crit_u = (
                 ((self.u - old_u).norm(dim=[1, 2]) / old_u.norm(dim=[1, 2]))
-                .mean()
+                .nanmean()
                 .item()
             )
             if not self.id_cov:
@@ -230,7 +257,7 @@ class RPADDLE_base(AbstractMethod):
                         (self.q - old_cov).norm(dim=[1, 2, 3])
                         / old_cov.norm(dim=[1, 2, 3])
                     )
-                    .mean()
+                    .nanmean()
                     .item()
                 )
 
