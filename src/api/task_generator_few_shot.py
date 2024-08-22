@@ -10,6 +10,7 @@ class Task_Generator_Few_shot:
         n_class,
         loader_support,
         loader_query,
+        data_mean,
         backbone,
         args,
     ):
@@ -21,6 +22,7 @@ class Task_Generator_Few_shot:
             n_class (int): the number of classes.
             loader_support (DataLoader): the data loader for the support set.
             loader_query (DataLoader): the data loader for the query set.
+            data_mean (torch.tensor): the mean of the features of the training set.
             backbone (nn.Module): backbone used for feature extraction
             args (argparse.Namespace): the arguments.
         """
@@ -30,6 +32,7 @@ class Task_Generator_Few_shot:
         self.n_query = n_query
         self.loader_support = loader_support
         self.loader_query = loader_query
+        self.data_mean = data_mean
         self.n_class = n_class
         self.backbone = backbone
         self.args = args
@@ -68,6 +71,7 @@ class Task_Generator_Few_shot:
             "y_s": new_labels_support.long(),
             "x_q": new_data_query,
             "y_q": new_labels_query.long(),
+            "x_mean": self.data_mean,
         }
         return task
 
@@ -104,6 +108,10 @@ class Task_Generator_Few_shot:
                 merged_tasks[key] = torch.cat(
                     [tasks_dics[i][key] for i in range(n_task)], dim=0
                 ).view(n_task, n_samples, -1)
+            elif key == "x_mean":
+                merged_tasks[key] = torch.cat(
+                    [tasks_dics[i][key] for i in range(n_task)], dim=0
+                ).view(n_task, -1)
             else:
                 raise Exception("Wrong dict key")
 

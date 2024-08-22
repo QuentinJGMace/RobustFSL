@@ -118,6 +118,7 @@ class TIM(AbstractMethod):
         y_q = task_dic["y_q"]  # [n_task, n_query]
         x_s = task_dic["x_s"]  # [n_task, shot, feature_dim]
         x_q = task_dic["x_q"]  # [n_task, n_query, feature_dim]
+        x_mean = task_dic["x_mean"]  # [feature_dim]
 
         # Transfer tensors to GPU if needed
         support = x_s.to(self.device)  # [ N * (K_s + K_q), d]
@@ -126,10 +127,13 @@ class TIM(AbstractMethod):
         y_q = y_q.long().squeeze(2).to(self.device)
 
         # Perform normalizations required
-        support = F.normalize(support, dim=2)
-        query = F.normalize(query, dim=2)
-        # scaler = MinMaxScaler(feature_range=(0, 1))
-        # query, support = scaler(query, support)
+        # support = (support - x_mean.unsqueeze(1))
+        # query = (query - x_mean.unsqueeze(1))
+        # support = F.normalize(support, dim=2)
+        # query = F.normalize(query, dim=2)
+        # # scaler = MinMaxScaler(feature_range=(0, 1))
+        # # query, support = scaler(query, support)
+        support, query = self.normalizer(support, query, x_mean=x_mean)
         support = support.to(self.device)
         query = query.to(self.device)
 
@@ -184,7 +188,7 @@ class TIM_GD(TIM):
         self.weights.requires_grad_()
         optimizer = torch.optim.Adam([self.weights], lr=self.lr)
         y_s_one_hot = get_one_hot(y_s, self.n_class)
-        self.backbone.train()
+        # self.backbone.train()
 
         for i in wrap_tqdm(range(self.n_iter), disable_tqdm=True):
 

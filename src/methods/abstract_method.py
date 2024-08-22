@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from src.logger import Logger
 import matplotlib.pyplot as plt
+from src.dataset import NORMALIZERS
 
 
 class AbstractMethod(nn.Module):
@@ -18,6 +19,7 @@ class AbstractMethod(nn.Module):
         self.backbone = backbone
         self.log_file = log_file
         self.logger = Logger(__name__, self.log_file)
+        self.normalizer = NORMALIZERS[args.normalizer]
         self.args = args
 
     def __del__(self):
