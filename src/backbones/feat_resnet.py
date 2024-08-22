@@ -72,6 +72,7 @@ class FEATResNet12(nn.Module):
     def __init__(
         self,
         block=FEATBasicBlock,
+        **kwargs,
     ):
         self.inplanes = 3
         super().__init__()
@@ -138,12 +139,12 @@ class FEATResNet12(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x):  # pylint: disable=invalid-name
+    def forward(self, x, feature):  # pylint: disable=invalid-name
         """
         Iterate over the blocks and apply them sequentially.
         """
         x = self.layer4(self.layer3(self.layer2(self.layer1(x))))
-        return x.mean((-2, -1))
+        return x.mean((-2, -1)), None
 
 
 def feat_resnet12(**kwargs):
