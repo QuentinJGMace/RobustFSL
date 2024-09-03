@@ -84,10 +84,6 @@ class KM(AbstractMethod):
         y_q = y_q.long().squeeze(2).to(self.device)
 
         # Perform normalizations
-        # support = F.normalize(support, dim=2).to(self.device)
-        # query = F.normalize(query, dim=2).to(self.device)
-        # scaler = MinMaxScaler(feature_range=(0, 1))
-        # query, support = scaler(query, support)
         support, query = self.normalizer(support, query, train_mean=x_mean)
 
         # Run adaptation
