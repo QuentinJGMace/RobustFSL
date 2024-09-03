@@ -1,4 +1,5 @@
 import torch
+from src.api.cfg_utils import CfgNode
 
 
 def generate_outliers(
@@ -6,7 +7,7 @@ def generate_outliers(
     all_labels,
     indices,
     n_outliers=0,
-    outlier_type="mult_unif",
+    outlier_params=None,
     is_support=False,
     save_mult_outlier_distrib=False,
 ):
@@ -23,6 +24,13 @@ def generate_outliers(
         new_labels : Labels with outliers.
         indices_outliers : Indices of the outliers.
     """
+    if outlier_params is None:
+        outlier_params = CfgNode(
+            {
+                "name": "mult_unif",
+                "max_outlier_mult": 5,
+            }
+        )
     # if no outliers to be added, return the original features and labels
     if (n_outliers) == 0:
         return all_features[indices].clone(), all_labels[indices].clone(), [], None
@@ -44,8 +52,8 @@ def generate_outliers(
     mult = None
 
     # generates the outliers
-    new_features[mask_outliers], mult = OUTLIER_FUNCTIONS[outlier_type](
-        all_features[indices[mask_outliers]]
+    new_features[mask_outliers], mult = OUTLIER_FUNCTIONS[outlier_params["name"]](
+        all_features[indices[mask_outliers]], outlier_params=outlier_params
     )
 
     new_features[~mask_outliers] = all_features[indices[~mask_outliers]]
@@ -53,7 +61,7 @@ def generate_outliers(
     return new_features, new_labels, indices_outliers, mult
 
 
-def gen_mult_unif_outliers(features: torch.Tensor, scalar_range=(1.0, 5.0)):
+def gen_mult_unif_outliers(features: torch.Tensor, outlier_params: CfgNode = None):
     """
     Generate outliers by multiplying the features with a random scalar value.
 
@@ -61,13 +69,14 @@ def gen_mult_unif_outliers(features: torch.Tensor, scalar_range=(1.0, 5.0)):
         features : Features to generate outliers from.
         scalar_range : Range of the scalar value to multiply with. (scalar generated from U(low, high))
     """
-    low, high = scalar_range
+    high = outlier_params["max_outlier_mult"]
+    low = 1.0
     mult = torch.rand(features.size(0), 1) * (high - low) + low
     mult = mult.to(features.device)
     return features * mult, mult
 
 
-def gen_mult_randn_outliers(features: torch.Tensor, std=5.0):
+def gen_mult_randn_outliers(features: torch.Tensor, outlier_params: CfgNode = None):
     """
     Generate outliers by multiplying the features with a scalar value generated from a normal distribution.
 
@@ -76,15 +85,17 @@ def gen_mult_randn_outliers(features: torch.Tensor, std=5.0):
         mean : Mean of the normal distribution.
         std : Standard deviation of the normal distribution.
     """
+    std = outlier_params["std_outlier_mult"]
     mult = torch.abs(torch.randn(features.size(0), 1)) * std
     mult = mult.to(features.device)
     return features * mult, mult
 
 
 OUTLIER_FUNCTIONS = {
-    "zeros": lambda x: (torch.zeros_like(x), None),
-    "randn": lambda x: (torch.randn_like(x), None),
-    "rand": lambda x: (torch.rand_like(x), None),
+    "zeros": lambda x, outlier_params=None: (torch.zeros_like(x), None),
+    "randn": lambda x, outlier_params=None: (torch.randn_like(x) * 5, None),
+    "rand": lambda x, outlier_params=None: (torch.rand_like(x), None),
     "mult_unif": gen_mult_unif_outliers,
     "mult_randn": gen_mult_randn_outliers,
+    # TODO : multiply 30% of features by a scalar
 }

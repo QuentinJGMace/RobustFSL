@@ -285,7 +285,7 @@ class Evaluator_few_shot:
                     labels_support,
                     indices_support,
                     self.args.n_outliers_support,
-                    outlier_type=self.args.outlier_type,
+                    outlier_params=self.args.outlier_params,
                     is_support=True,
                     save_mult_outlier_distrib=self.save_mult_outlier_distrib,
                 )
@@ -300,7 +300,7 @@ class Evaluator_few_shot:
                     labels_query,
                     indices_query,
                     self.args.n_outliers_query,
-                    outlier_type=self.args.outlier_type,
+                    outlier_params=self.args.outlier_params,
                     is_support=False,
                     save_mult_outlier_distrib=self.save_mult_outlier_distrib,
                 )
