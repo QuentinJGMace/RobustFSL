@@ -3,7 +3,9 @@ from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 import torch
+import torch.backends.cudnn as cudnn
 
 # import utils and datasets
 from src.logger import Logger
@@ -34,6 +36,13 @@ class Evaluator_few_shot:
         self.logger = logger
         # self.logger = Logger(__name__, log_file)
         self.disable_tqdm = disable_tqdm
+
+    def set_seed(self):
+        if self.args.seed != -1:
+            random.seed(self.args.seed)
+            torch.manual_seed(self.args.seed)
+            np.random.seed(self.args.seed)
+            cudnn.deterministic = True
 
     def initialize_data_loaders(self, dataset, preprocess):
         """
@@ -131,6 +140,8 @@ class Evaluator_few_shot:
         :param preprocess: Preprocessing function for data.
         :return: Mean accuracies of the evaluation.
         """
+
+        self.set_seed()
 
         backbone.eval()
 

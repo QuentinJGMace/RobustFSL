@@ -41,7 +41,7 @@ def init_wandb(args):
     )
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(method=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Main")
     cfg = load_cfg_from_cfg_file("config/main_config.yaml")
     parser.add_argument("--opts", default=None, nargs=argparse.REMAINDER)
@@ -49,7 +49,10 @@ def parse_args() -> argparse.Namespace:
     if args.opts is not None:
         cfg = merge_cfg_from_list(cfg, args.opts)
     dataset_config = "config/datasets_config/config_{}.yaml".format(cfg.dataset)
-    method_config = "config/methods_config/{}.yaml".format(cfg.method)
+    if method:
+        method_config = "config/methods_config/{}.yaml".format(method)
+    else:
+        method_config = "config/methods_config/{}.yaml".format(cfg.method)
     backbone_config = "config/backbones_config/{}.yaml".format(cfg.backbone)
     cfg.update(load_cfg_from_cfg_file(dataset_config))
     cfg.update(load_cfg_from_cfg_file(method_config))
