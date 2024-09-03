@@ -3,7 +3,6 @@ from src.methods.mm_rapddle_id import MM_PADDLE_id
 
 
 class MM_RPADDLE_reg(MM_PADDLE_id):
-
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.deg_reg_theta = args.deg_reg_theta
@@ -20,7 +19,10 @@ class MM_RPADDLE_reg(MM_PADDLE_id):
         Returns:
             rho : torch Tensor of shape (n_task, n_samples, n_class)
         """
-        dist_2 = (samples.unsqueeze(2) - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        dist_2 = (
+            self.temp
+            * (samples.unsqueeze(2) - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        )
         return dist_2 + self.eps
 
     def rho_beta(self, samples):
@@ -32,7 +34,10 @@ class MM_RPADDLE_reg(MM_PADDLE_id):
         Returns:
             rho^(beta/2) : torch Tensor of shape (n_task, n_samples, n_class)
         """
-        dist_2 = (samples.unsqueeze(2) - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        dist_2 = (
+            self.temp
+            * (samples.unsqueeze(2) - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
+        )
         return (dist_2 + self.eps) ** (self.beta / 2)
 
     def update_theta(self, samples, all_u):
@@ -41,7 +46,9 @@ class MM_RPADDLE_reg(MM_PADDLE_id):
         if self.beta == 2.0 and self.deg_reg_theta == 1:
             # TODO : SOlveur direct
             # equation to solve is a degree 2 polynomial
-            c = (1 - self.beta) / 2 * (self.rho_beta(samples) * all_u).sum(2)
+            c = (
+                (1 - self.beta) / 2 * (self.rho_beta(samples) * all_u).sum(2)
+            ) - self.reg_inv
             b = feature_dim * (1 - 1 / self.beta) - self.kappa
             if self.reg_theta == 0:
                 self.theta = -c / b
@@ -49,6 +56,6 @@ class MM_RPADDLE_reg(MM_PADDLE_id):
             a = self.reg_theta
 
             delta = b**2 - 4 * a * c
-            self.theta = (-b + torch.sqrt(delta)) / (2 * a)  # + 1
+            self.theta = ((-b + torch.sqrt(delta)) / (2 * a)) + 10e-14
         elif self.beta == 1.5 and self.deg_reg_theta == 1:
             pass

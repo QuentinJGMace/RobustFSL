@@ -74,18 +74,21 @@ class KM(AbstractMethod):
         y_q = task_dic["y_q"]  # [n_task, n_query]
         support = task_dic["x_s"]  # [n_task, shot, feature_dim]
         query = task_dic["x_q"]  # [n_task, n_query, feature_dim]
+        x_mean = task_dic["x_mean"]  # [n_task, feature_dim]
 
         # Transfer tensors to GPU if needed
         support = support.to(self.device)
         query = query.to(self.device)
+        x_mean = x_mean.to(self.device)
         y_s = y_s.long().squeeze(2).to(self.device)
         y_q = y_q.long().squeeze(2).to(self.device)
 
         # Perform normalizations
         # support = F.normalize(support, dim=2).to(self.device)
         # query = F.normalize(query, dim=2).to(self.device)
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        query, support = scaler(query, support)
+        # scaler = MinMaxScaler(feature_range=(0, 1))
+        # query, support = scaler(query, support)
+        support, query = self.normalizer(support, query, train_mean=x_mean)
 
         # Run adaptation
         self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
