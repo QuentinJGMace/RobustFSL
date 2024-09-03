@@ -56,4 +56,4 @@ def paddle_normalize(support, query, **kwargs):
     ratio = query.min(dim=1, keepdim=True)[0]
     query.mul_(scale).sub_(ratio)
     support.mul_(scale).sub_(ratio)
-    return query, support
+    return support, query
