@@ -45,6 +45,23 @@ class TIM(AbstractMethod):
         )  #
         return logits
 
+    def get_logits_cosine(self, samples):
+        """
+        inputs:
+            samples : torch.Tensor of shape [n_task, shot, feature_dim]
+
+        returns :
+            logits : torch.Tensor of shape [n_task, shot, num_class]
+        """
+
+        n_tasks = samples.size(0)
+        logits = (
+            self.temp
+            * F.normalize(samples, dim=-1)
+            @ F.normalize(self.weights, dim=-1).transpose(-1, -2)
+        )
+        return logits
+
     def init_weights(self, support, query, y_s):
         """
         inputs:
@@ -127,13 +144,8 @@ class TIM(AbstractMethod):
         y_q = y_q.long().squeeze(2).to(self.device)
 
         # Perform normalizations required
-        # support = (support - x_mean.unsqueeze(1))
-        # query = (query - x_mean.unsqueeze(1))
-        # support = F.normalize(support, dim=2)
-        # query = F.normalize(query, dim=2)
-        # # scaler = MinMaxScaler(feature_range=(0, 1))
-        # # query, support = scaler(query, support)
-        support, query = self.normalizer(support, query, x_mean=x_mean)
+
+        support, query = self.normalizer(support, query, train_mean=x_mean)
         support = support.to(self.device)
         query = query.to(self.device)
 
@@ -196,13 +208,10 @@ class TIM_GD(TIM):
             t0 = time.time()
             logits_s = self.get_logits(support)
             logits_q = self.get_logits(query)
+            # logits_s = self.get_logits_cosine(support)
+            # logits_q = self.get_logits_cosine(query)
 
-            ce = (
-                -(y_s_one_hot * torch.log(logits_s.softmax(2) + 1e-12))
-                .sum(2)
-                .mean(1)
-                .sum(0)
-            )
+            ce = -(y_s_one_hot * logits_s.log_softmax(2) + 1e-12).sum(2).mean(1).sum(0)
             q_probs = logits_q.softmax(2)
             q_cond_ent = -(q_probs * torch.log(q_probs + 1e-12)).sum(2).mean(1).sum(0)
             q_ent = (

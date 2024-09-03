@@ -60,7 +60,7 @@ class CategoriesSampler_few_shot:
             m_ind_support : List of indexes where each class appears in the support set
             m_ind_query : List of indexes where each class appears in the query set
         """
-        label_support = np.array(label_support.cpu())  # all data label
+        label_support = np.array(label_support.cpu(), dtype=int)  # all data label
         self.m_ind_support = []  # the data index of each class
         for i in range(max(label_support) + 1):
             # all data index of this class

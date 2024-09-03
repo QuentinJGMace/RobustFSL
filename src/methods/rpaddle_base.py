@@ -130,11 +130,12 @@ class RPADDLE_base(AbstractMethod):
             task_dic : dict {"x_s": torch.Tensor, "y_s": torch.Tensor, "x_q": torch.Tensor, "y_q": torch.Tensor}
             shot : int
         """
-        support, query, y_s, y_q = (
+        support, query, y_s, y_q, x_mean = (
             task_dic["x_s"],
             task_dic["x_q"],
             task_dic["y_s"],
             task_dic["y_q"],
+            task_dic["x_mean"],
         )
 
         support = support.to(self.device)
@@ -143,8 +144,7 @@ class RPADDLE_base(AbstractMethod):
         y_q = y_q.long().squeeze(2).to(self.device)
 
         # Perform normalizations
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        query, support = scaler(query, support)
+        support, query = self.normalizer(support, query, train_mean=x_mean)
 
         # Run adaptation
         self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
@@ -159,7 +159,7 @@ class RPADDLE_base(AbstractMethod):
             if self.theta.size(1) == support.size(1) + query.size(1):
                 self.mults["support"] = tau[:, : support.size(1)]
                 self.mults["query"] = tau[:, support.size(1) :]
-                with open("thetas_mm_no_reg.txt", "a") as f:
+                with open("thetas_mm_reg_0.1_inv_eps.txt", "a") as f:
                     f.write(f"N shots : {self.args.shots}" + "\n")
                     f.write(
                         f"N outliers support : {self.args.n_outliers_support}, N outliers query : {self.args.n_outliers_query}"
@@ -183,6 +183,10 @@ class RPADDLE_base(AbstractMethod):
                     )
                     f.write(
                         f"Number of infs support : {self.theta[:, : support.size(1)].isinf().sum().item()} Query : {self.theta[:, support.size(1) :].isinf().sum().item()}"
+                        + "\n"
+                    )
+                    f.write(
+                        f"Number of zeros support : {self.theta[:, : support.size(1)].eq(0).sum().item()} Query : {self.theta[:, support.size(1) :].eq(0).sum().item()}"
                         + "\n"
                     )
                     f.write("-------------------------------------------" + "\n\n")
