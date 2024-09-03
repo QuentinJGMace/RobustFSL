@@ -11,6 +11,7 @@ from .paddle import Paddle
 from .paddle_gd import Paddle_GD
 from .tim import TIM_GD, Alpha_TIM
 from .rtim import RTIM_GD
+from .baseline import Baseline
 
 
 def get_method_builder(backbone, device, args, log_file):
@@ -25,6 +26,8 @@ def get_method_builder(backbone, device, args, log_file):
     # few-shot methods
     if args.name_method == "RPADDLE":
         method_builder = MutlNoisePaddle_GD(**method_info)
+    elif args.name_method == "BASELINE":
+        method_builder = Baseline(**method_info)
     elif args.name_method == "RPADDLE2":
         method_builder = MultNoisePaddle_GD2(**method_info)
     elif args.name_method == "RPADDLE2_CLASS":
