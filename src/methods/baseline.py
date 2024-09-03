@@ -168,4 +168,9 @@ class Baseline(AbstractMethod):
         support, query = self.normalizer(support, query, train_mean=x_mean)
 
         # Run adaptation
-        self.run_method(support=support, query=query
+        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
+
+        # Extract adaptation logs
+        logs = self.get_logs()
+
+        return logs
