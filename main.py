@@ -3,6 +3,7 @@ import random
 import argparse
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 import torch.backends.cudnn as cudnn
 import torch.utils.data
 import torch.utils.data.distributed
@@ -23,11 +24,6 @@ def main():
     args = parse_args()
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    if args.seed != -1:
-        random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        np.random.seed(args.seed)
-        cudnn.deterministic = True
     torch.cuda.set_device(args.device)
 
     # create model
@@ -47,7 +43,19 @@ def main():
         evaluator = Evaluator_few_shot(
             device=device, args=args, log_file=log_file, logger=logger
         )
-    evaluator.run_full_evaluation(backbone=backbone, preprocess=preprocess_transform)
+    results_dict = evaluator.run_full_evaluation(backbone=backbone, preprocess=preprocess_transform, return_results=True)
+
+    n_criterions = len(results_dict["mean_criterions"].keys())
+    plt.figure(figsize=(10, 5))
+    for key in results_dict["mean_criterions"].keys():
+        plt.plot(
+            range(len(results_dict["mean_criterions"][key])),
+            results_dict["mean_criterions"][key],
+            label=f"Criterion {key}",
+        )
+    plt.legend()
+
+    plt.savefig("criterions.png")
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ data
 wandb/
 results_few_shot/
 *.ipynb
+*.txt
 
 .pre-commit-config.yaml
 
