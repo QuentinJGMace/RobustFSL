@@ -13,6 +13,8 @@ from .tim import TIM_GD, Alpha_TIM
 from .rtim import RTIM_GD
 from .baseline import Baseline
 from .bdcspn import BDCSPN
+from .ici import ICI
+from .laplacianshot import LaplacianShot
 
 
 def get_method_builder(backbone, device, args, log_file):
@@ -31,6 +33,10 @@ def get_method_builder(backbone, device, args, log_file):
         method_builder = Baseline(**method_info)
     elif args.name_method == "BDCSPN":
         method_builder = BDCSPN(**method_info)
+    elif args.name_method == "ICI":
+        method_builder = ICI(**method_info)
+    elif args.name_method == "LAPLACIANSHOT":
+        method_builder = LaplacianShot(**method_info)
     elif args.name_method == "RPADDLE2":
         method_builder = MultNoisePaddle_GD2(**method_info)
     elif args.name_method == "RPADDLE2_CLASS":

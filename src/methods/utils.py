@@ -184,3 +184,20 @@ def simplex_project(tensor, device):
         print(tensor)
         raise ValueError("Simplex constraint does not seem satisfied")
     return projected_tensor
+
+
+def get_metric(metric_type):
+    METRICS = {
+        "cosine": lambda gallery, query: 1.0
+        - F.cosine_similarity(query[:, None, :], gallery[None, :, :], dim=2),
+        "euclidean": lambda gallery, query: (
+            (query[:, None, :] - gallery[None, :, :]) ** 2
+        ).sum(2),
+        "l1": lambda gallery, query: torch.norm(
+            (query[:, None, :] - gallery[None, :, :]), p=1, dim=2
+        ),
+        "l2": lambda gallery, query: torch.norm(
+            (query[:, None, :] - gallery[None, :, :]), p=2, dim=2
+        ),
+    }
+    return METRICS[metric_type]

@@ -6,26 +6,7 @@ from numpy import linalg as LA
 import numpy as np
 from scipy.stats import mode
 from src.methods.abstract_method import AbstractMethod
-from src.methods.utils import get_one_hot
-
-# from ..utils import get_metric, Logger, get_one_hot
-
-
-def get_metric(metric_type):
-    METRICS = {
-        "cosine": lambda gallery, query: 1.0
-        - F.cosine_similarity(query[:, None, :], gallery[None, :, :], dim=2),
-        "euclidean": lambda gallery, query: (
-            (query[:, None, :] - gallery[None, :, :]) ** 2
-        ).sum(2),
-        "l1": lambda gallery, query: torch.norm(
-            (query[:, None, :] - gallery[None, :, :]), p=1, dim=2
-        ),
-        "l2": lambda gallery, query: torch.norm(
-            (query[:, None, :] - gallery[None, :, :]), p=2, dim=2
-        ),
-    }
-    return METRICS[metric_type]
+from src.methods.utils import get_one_hot, get_metric
 
 
 class BDCSPN(AbstractMethod):
