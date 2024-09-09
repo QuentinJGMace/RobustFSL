@@ -19,7 +19,12 @@ class AbstractMethod(nn.Module):
         self.backbone = backbone
         self.log_file = log_file
         self.logger = Logger(__name__, self.log_file)
-        self.normalizer = NORMALIZERS[args.normalizer]
+        if args.normalizer != "default":
+            self.normalizer = NORMALIZERS[args.normalizer]
+        else:
+            self.normalizer = NORMALIZERS[
+                "transductive"
+            ]  # used by most methods, may be overwritten if the normalizer is not the correct one for the method
         self.args = args
 
     def __del__(self):

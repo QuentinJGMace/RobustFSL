@@ -46,9 +46,7 @@ class MM_RPADDLE_reg(MM_PADDLE_id):
         if self.beta == 2.0 and self.deg_reg_theta == 1:
             # TODO : SOlveur direct
             # equation to solve is a degree 2 polynomial
-            c = (
-                (1 - self.beta) / 2 * (self.rho_beta(samples) * all_u).sum(2)
-            ) - self.reg_inv
+            c = (1 - self.beta) / 2 * (self.rho_beta(samples) * all_u).sum(2)
             b = feature_dim * (1 - 1 / self.beta) - self.kappa
             if self.reg_theta == 0:
                 self.theta = -c / b
