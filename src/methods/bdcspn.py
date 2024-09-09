@@ -51,7 +51,7 @@ class BDCSPN(AbstractMethod):
         init_prototypes = weights / counts
 
         proto_weights = []
-        for j in tqdm(range(self.number_tasks)):
+        for j in range(self.number_tasks):
 
             distance = get_metric("cosine")(init_prototypes[j], query_aug[j])
             predict = torch.argmin(distance, dim=1)
