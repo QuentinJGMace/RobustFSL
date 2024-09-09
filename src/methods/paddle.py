@@ -1,6 +1,7 @@
 from src.methods.utils import get_one_hot
 from src.api.utils import wrap_tqdm
 from src.methods.km import KM
+from src.dataset import NORMALIZERS
 import torch
 import time
 
@@ -8,6 +9,9 @@ import time
 class Paddle(KM):
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
+
+        if self.args.normalizer == "default":
+            self.normalizer = NORMALIZERS["paddle"]
 
     def __del__(self):
         self.logger.del_logger()
