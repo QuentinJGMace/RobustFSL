@@ -15,6 +15,7 @@ from .baseline import Baseline
 from .bdcspn import BDCSPN
 from .ici import ICI
 from .laplacianshot import LaplacianShot
+from .pt_map import PT_MAP
 
 
 def get_method_builder(backbone, device, args, log_file):
@@ -37,6 +38,8 @@ def get_method_builder(backbone, device, args, log_file):
         method_builder = ICI(**method_info)
     elif args.name_method == "LAPLACIANSHOT":
         method_builder = LaplacianShot(**method_info)
+    elif args.name_method == "PT_MAP":
+        method_builder = PT_MAP(**method_info)
     elif args.name_method == "RPADDLE2":
         method_builder = MultNoisePaddle_GD2(**method_info)
     elif args.name_method == "RPADDLE2_CLASS":
