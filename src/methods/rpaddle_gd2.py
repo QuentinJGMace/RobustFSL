@@ -76,9 +76,12 @@ class MultNoisePaddle_GD2(RPADDLE_base):
             sum_log_theta = (
                 feature_dim * (1 - 1 / self.beta) - self.kappa
             ) * torch.log(self.theta + 1e-12).sum(1).mean(0)
-            l2_theta = (
-                (1 / self.eta) * ((self.theta).norm(dim=-1, keepdim=False, p=2)) ** 2
-            ).mean(0)
+            if self.kappa != 0:
+                l2_theta = (
+                    (1 / self.eta) * ((self.theta).norm(dim=-1, keepdim=False, p=2)) ** 2
+                ).mean(0)
+            else:
+                l2_theta = 0
 
             theta_term = sum_log_theta + l2_theta
 
@@ -106,7 +109,7 @@ class MultNoisePaddle_GD2(RPADDLE_base):
                 - self.lambd * partition_complexity
                 + theta_term
                 - q_term
-                # + ent_barrier  # - self.lambd * partition_complexity + theta_term - q_term
+                + ent_barrier  # - self.lambd * partition_complexity + theta_term - q_term
             )
 
             # Backward pass
