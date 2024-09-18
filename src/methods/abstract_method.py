@@ -23,7 +23,7 @@ class AbstractMethod(nn.Module):
             self.normalizer = NORMALIZERS[args.normalizer]
         else:
             self.normalizer = NORMALIZERS[
-                "transductive"
+                "paddle"
             ]  # used by most methods, may be overwritten if the normalizer is not the correct one for the method
         self.args = args
 
