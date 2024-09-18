@@ -8,6 +8,7 @@ import torch
 import time
 from src.methods.abstract_method import AbstractMethod
 from src.methods.utils import get_one_hot
+from src.dataset import NORMALIZERS
 
 
 class PT_MAP(AbstractMethod):
@@ -15,6 +16,8 @@ class PT_MAP(AbstractMethod):
         super(PT_MAP, self).__init__(backbone, device, log_file, args)
         self.alpha = args.alpha_pt
         self.lam = args.lam
+        if self.args.normalizer == "default":
+            self.normalizer = NORMALIZERS["transductive"]
         self.init_info_lists()
 
     def run_task(self, task_dic, shot):
