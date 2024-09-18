@@ -69,17 +69,18 @@ class MultNoisePaddle_GD2(RPADDLE_base):
             all_p = torch.cat([y_s_one_hot.float(), self.u.float()], dim=1)
 
             data_fitting = (
-                (distances * all_p).sum((-2, -1)).mean(0)
+                (distances * all_p).sum((-2, -1)).sum(0)
             )  # .mean(0) for more stability ?
 
             # Theta regularization term
             sum_log_theta = (
                 feature_dim * (1 - 1 / self.beta) - self.kappa
-            ) * torch.log(self.theta + 1e-12).sum(1).mean(0)
+            ) * torch.log(self.theta + 1e-12).sum(1).sum(0)
             if self.kappa != 0:
                 l2_theta = (
-                    (1 / self.eta) * ((self.theta).norm(dim=-1, keepdim=False, p=2)) ** 2
-                ).mean(0)
+                    (1 / self.eta)
+                    * ((self.theta - 1).norm(dim=-1, keepdim=False, p=1))
+                ).sum(0)
             else:
                 l2_theta = 0
 
@@ -88,7 +89,7 @@ class MultNoisePaddle_GD2(RPADDLE_base):
             # Covariance regularizing term
             if not self.id_cov:
                 q_log_det = torch.logdet(self.q).unsqueeze(1)
-                q_term = (all_p * q_log_det).sum((-2, -1)).mean(0)
+                q_term = (all_p * q_log_det).sum((-2, -1)).sum(0)
             else:
                 q_term = 0
 
@@ -97,11 +98,11 @@ class MultNoisePaddle_GD2(RPADDLE_base):
             partition_complexity = (
                 (query_class_ratios * torch.log(query_class_ratios + 1e-12))
                 .sum(-1)
-                .mean(0)
+                .sum(0)
             )
 
             # enthropic barrier
-            ent_barrier = (self.u * torch.log(self.u + 1e-12)).sum(-1).sum(-1).mean(0)
+            ent_barrier = (self.u * torch.log(self.u + 1e-12)).sum(-1).sum(-1).sum(0)
 
             # final loss
             loss = (
