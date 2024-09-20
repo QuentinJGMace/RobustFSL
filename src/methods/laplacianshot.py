@@ -85,7 +85,7 @@ class LaplacianShot(AbstractMethod):
         init_prototypes = weights / counts
 
         proto_weights = []
-        for j in tqdm(range(self.number_tasks)):
+        for j in range(self.number_tasks):
             distance = get_metric("cosine")(init_prototypes[j], query_aug[j])
             predict = torch.argmin(distance, dim=1)
             cos_sim = F.cosine_similarity(
@@ -283,7 +283,7 @@ class LaplacianShot(AbstractMethod):
             )
         )
         n_tasks = support.shape[0]
-        for i in tqdm(range(n_tasks)):
+        for i in range(n_tasks):
 
             t0 = time.time()
             substract = support[i][:, None, :] - query[i]

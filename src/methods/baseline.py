@@ -121,7 +121,7 @@ class Baseline(AbstractMethod):
             optimizer = torch.optim.Adam([self.prototypes], lr=self.lr)
             y_s_one_hot = get_one_hot(y_s, self.n_class)
 
-            for i in tqdm(range(self.n_iter)):
+            for i in range(self.n_iter):
                 old_prototypes = self.prototypes.clone()
                 t0 = time.time()
 

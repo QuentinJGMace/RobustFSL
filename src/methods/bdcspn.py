@@ -123,7 +123,7 @@ class BDCSPN(AbstractMethod):
         """
         self.logger.info(" ==> Executing predictions on {} shot tasks ...".format(shot))
         out_list = []
-        for i in tqdm(range(self.number_tasks)):
+        for i in range(self.number_tasks):
             t0 = time.time()
             y_s_i = np.unique(y_s[i])
             substract = support[i][:, None, :] - query[i]
