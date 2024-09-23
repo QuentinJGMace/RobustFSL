@@ -11,6 +11,7 @@ class Task_Generator_Few_shot:
         loader_support,
         loader_query,
         data_mean,
+        outliers_dict,
         backbone,
         args,
     ):
@@ -33,22 +34,35 @@ class Task_Generator_Few_shot:
         self.loader_support = loader_support
         self.loader_query = loader_query
         self.data_mean = data_mean
-        self.n_class = n_class
+        self.outliers_dict = outliers_dict
         self.backbone = backbone
         self.args = args
 
-    def get_task(self, data_support, data_query, labels_support, labels_query):
+    def get_task(
+        self,
+        data_support,
+        data_query,
+        labels_support,
+        labels_query,
+        outliers_support,
+        outliers_query,
+    ):
         """
         inputs:
             data_support : torch.tensor of shape [shot * k_eff, channels, H, W]
             data_query : torch.tensor of shape [n_query, channels, H, W]
             labels_support :  torch.tensor of shape [shot * k_eff + n_query]
             labels_query :  torch.tensor of shape [n_query]
+            outliers_support : torch.tensor of shape [n_outliers_support]
+            outliers_query : torch.tensor of shape [n_outliers_query]
         returns :
             task : Dictionary : x_support : torch.tensor of shape [k_eff * shot, channels, H, W]
-                                 x_query : torch.tensor of shape [n_query, channels, H, W]
-                                 y_support : torch.tensor of shape [k_eff * shot]
-                                 y_query : torch.tensor of shape [n_query]
+                                x_query : torch.tensor of shape [n_query, channels, H, W]
+                                y_support : torch.tensor of shape [k_eff * shot]
+                                y_query : torch.tensor of shape [n_query]
+                                x_mean: torch.tensor of shape [feature_dim]
+                                outliers_support : torch.tensor of shape [n_outliers_support]
+                                outliers_query : torch.tensor of shape [n_outliers_query]
         """
 
         unique_labels = torch.flip(
@@ -57,9 +71,12 @@ class Task_Generator_Few_shot:
         new_labels_support = torch.zeros_like(labels_support)
         new_labels_query = torch.zeros_like(labels_query)
 
+        label_correspondance = {}
+
         for j, y in enumerate(unique_labels):
             new_labels_support[labels_support == y] = j
             new_labels_query[labels_query == y] = j
+            label_correspondance[j] = y.int().item()
 
         new_data_query = data_query
         new_data_support = data_support
@@ -72,6 +89,9 @@ class Task_Generator_Few_shot:
             "x_q": new_data_query,
             "y_q": new_labels_query.long(),
             "x_mean": self.data_mean,
+            "outliers_support": outliers_support.long(),
+            "outliers_query": outliers_query.long(),
+            "label_correspondance": label_correspondance,
         }
         return task
 
@@ -87,10 +107,22 @@ class Task_Generator_Few_shot:
 
         tasks_dics = []
 
-        for support, query in zip(self.loader_support, self.loader_query):
+        for support, query, outliers_support, outliers_query in zip(
+            self.loader_support,
+            self.loader_query,
+            self.outliers_dict["support"],
+            self.outliers_dict["query"],
+        ):
             (data_support, labels_support) = support
             (data_query, labels_query) = query
-            task = self.get_task(data_support, data_query, labels_support, labels_query)
+            task = self.get_task(
+                data_support,
+                data_query,
+                labels_support,
+                labels_query,
+                outliers_support,
+                outliers_query,
+            )
             tasks_dics.append(task)
 
         feature_size = data_support.size()[-1]
@@ -99,7 +131,8 @@ class Task_Generator_Few_shot:
         merged_tasks = {}
         n_task = len(tasks_dics)
         for key in tasks_dics[0].keys():
-            n_samples = tasks_dics[0][key].size(0)
+            if key in ["x_s", "x_q", "y_s", "y_q"]:
+                n_samples = tasks_dics[0][key].size(0)
             if key == "x_s" or key == "x_q":
                 merged_tasks[key] = torch.cat(
                     [tasks_dics[i][key] for i in range(n_task)], dim=0
@@ -112,6 +145,15 @@ class Task_Generator_Few_shot:
                 merged_tasks[key] = torch.cat(
                     [tasks_dics[i][key] for i in range(n_task)], dim=0
                 ).view(n_task, -1)
+            elif key == "outliers_support" or key == "outliers_query":
+                merged_tasks[key] = torch.cat(
+                    [tasks_dics[i][key] for i in range(n_task)], dim=0
+                ).view(n_task, -1)
+            elif key == "label_correspondance":
+                merged_tasks[key] = {
+                    k: [tasks_dics[i][key][k] for i in range(n_task)]
+                    for k in tasks_dics[0][key].keys()
+                }
             else:
                 raise Exception("Wrong dict key")
 
