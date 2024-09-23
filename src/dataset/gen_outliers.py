@@ -33,7 +33,12 @@ def generate_outliers(
         )
     # if no outliers to be added, return the original features and labels
     if (n_outliers) == 0:
-        return all_features[indices].clone(), all_labels[indices].clone(), [], None
+        return (
+            all_features[indices].clone(),
+            all_labels[indices].clone(),
+            torch.Tensor([]),
+            None,
+        )
 
     # Else chooses random indices and apply transformations
 
@@ -53,15 +58,17 @@ def generate_outliers(
 
     # generates the outliers
     new_features[mask_outliers], mult = OUTLIER_FUNCTIONS[outlier_params["name"]](
-        all_features[indices[mask_outliers]], outlier_params=outlier_params
+        all_features, indices[mask_outliers], outlier_params=outlier_params
     )
 
     new_features[~mask_outliers] = all_features[indices[~mask_outliers]]
 
-    return new_features, new_labels, indices_outliers, mult
+    return new_features, new_labels, perm[:n_outliers], mult
 
 
-def gen_mult_unif_outliers(features: torch.Tensor, outlier_params: CfgNode = None):
+def gen_mult_unif_outliers(
+    features: torch.Tensor, indices: torch.Tensor, outlier_params: CfgNode = None
+):
     """
     Generate outliers by multiplying the features with a random scalar value.
 
@@ -71,12 +78,14 @@ def gen_mult_unif_outliers(features: torch.Tensor, outlier_params: CfgNode = Non
     """
     high = outlier_params["max_outlier_mult"]
     low = 1.0
-    mult = torch.rand(features.size(0), 1) * (high - low) + low
+    mult = torch.rand(features[indices].size(0), 1) * (high - low) + low
     mult = mult.to(features.device)
-    return features * mult, mult
+    return features[indices] * mult, mult
 
 
-def gen_mult_randn_outliers(features: torch.Tensor, outlier_params: CfgNode = None):
+def gen_mult_randn_outliers(
+    features: torch.Tensor, indices: torch.Tensor, outlier_params: CfgNode = None
+):
     """
     Generate outliers by multiplying the features with a scalar value generated from a normal distribution.
 
@@ -86,16 +95,43 @@ def gen_mult_randn_outliers(features: torch.Tensor, outlier_params: CfgNode = No
         std : Standard deviation of the normal distribution.
     """
     std = outlier_params["std_outlier_mult"]
-    mult = torch.abs(torch.randn(features.size(0), 1)) * std
+    mult = torch.abs(torch.randn(features[indices].size(0), 1)) * std
     mult = mult.to(features.device)
-    return features * mult, mult
+    return features[indices] * mult, mult
+
+
+def swap_images(
+    features: torch.Tensor, indices: torch.Tensor, outlier_params: CfgNode = None
+):
+    """
+    Generate outliers by swapping the features with another random image.
+
+    Args:
+        features : Features to generate outliers from.
+        indices : Indices of the features to generate outliers from.
+    """
+    # Select random indices
+
+    perm = torch.randperm(len(features))
+    indices_outliers = perm[: len(indices)]
+    # print(len(features))
+    # print(indices)
+    # print(indices_outliers)
+    return features[indices_outliers], None
 
 
 OUTLIER_FUNCTIONS = {
-    "zeros": lambda x, outlier_params=None: (torch.zeros_like(x), None),
-    "randn": lambda x, outlier_params=None: (torch.randn_like(x) * 5, None),
-    "rand": lambda x, outlier_params=None: (torch.rand_like(x), None),
+    "zeros": lambda x, indices, outlier_params=None: (
+        torch.zeros_like(x[indices]),
+        None,
+    ),
+    "randn": lambda x, indices, outlier_params=None: (
+        torch.randn_like(x[indices]) * 5,
+        None,
+    ),
+    "rand": lambda x, indices, outlier_params=None: (torch.rand_like(x[indices]), None),
     "mult_unif": gen_mult_unif_outliers,
     "mult_randn": gen_mult_randn_outliers,
+    "swap_images": swap_images,
     # TODO : multiply 30% of features by a scalar
 }

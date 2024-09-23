@@ -271,7 +271,6 @@ class Evaluator_few_shot:
             sampler_support_query = sampling_method(sampler)
 
             test_loader_query, test_loader_support = [], []
-            list_indices_support, list_indices_query = [], []
             list_indices_outlier_support, list_indices_outlier_query = [], []
 
             for indices_support, indices_query in sampler_support_query:
@@ -305,8 +304,6 @@ class Evaluator_few_shot:
                     save_mult_outlier_distrib=self.save_mult_outlier_distrib,
                 )
                 test_loader_query.append((new_features_q, new_labels_q))
-                list_indices_query.append(indices_query)
-                list_indices_support.append(indices_support)
                 list_indices_outlier_query.append(indices_outliers_q)
                 list_indices_outlier_support.append(indices_outliers_s)
                 if not self.save_mult_outlier_distrib:
@@ -324,6 +321,10 @@ class Evaluator_few_shot:
                 loader_support=test_loader_support,
                 loader_query=test_loader_query,
                 data_mean=mean_features,
+                outliers_dict={
+                    "support": list_indices_outlier_support,
+                    "query": list_indices_outlier_query,
+                },
                 backbone=backbone,
                 args=self.args,
             )
