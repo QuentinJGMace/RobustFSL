@@ -345,6 +345,8 @@ class Evaluator_few_shot:
             # Run task
             logs = method.run_task(task_dic=tasks, shot=self.args.shots)
 
+            # self.save_predicted_means_per_class(method, tasks["label_correspondance"])
+
             if self.save_mult_outlier_distrib and hasattr(method, "mults"):
                 if "support" in method.mults:
                     self.pred_mults["support"].append(method.mults["support"].detach())
@@ -487,3 +489,31 @@ class Evaluator_few_shot:
                     self.args.shots, self.args.number_tasks, mean_times
                 )
             )
+
+    def save_predicted_means_per_class(self, method, label_correspondance):
+        """
+        Save the predicted means per class in a pickle
+        """
+
+        if hasattr(method, "prototypes"):
+            prototypes = method.prototypes.detach().cpu().numpy()
+        elif hasattr(method, "w"):
+            prototypes = method.w.detach().cpu().numpy()
+        elif hasattr(method, "weights"):
+            prototypes = method.weights.detach().cpu().numpy()
+        else:
+            raise ValueError("No prototypes found in the method")
+
+        predicted_prototypes = {}
+
+        for k in label_correspondance.keys():
+
+            for task in range(len(prototypes)):
+                predicted_prototypes[label_correspondance[k][task]] = prototypes[
+                    task, k
+                ]
+
+        path = f"predicted_means/{self.args.method}.pth"
+        save_pickle(path, predicted_prototypes)
+
+        1 / 0
