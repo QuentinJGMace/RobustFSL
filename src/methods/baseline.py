@@ -91,7 +91,6 @@ class Baseline(AbstractMethod):
         }
 
     def run_method(self, support, query, y_s, y_q):
-
         """
         Corresponds to the BASELINE inference
         inputs:
