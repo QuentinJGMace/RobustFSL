@@ -21,6 +21,7 @@ class MM_PADDLE_class(MM_PADDLE_id):
         self.theta = torch.ones(n_tasks, n_support + n_query, self.n_class).to(
             self.device
         )
+        self.theta[:, :n_support] = 1
         self.u = (self.get_logits(query)).softmax(-1).to(self.device)
 
         if not self.id_cov:
@@ -126,3 +127,37 @@ class MM_PADDLE_class(MM_PADDLE_id):
         den = (all_u.unsqueeze(-1) / den_den).sum(dim=1)
 
         self.prototypes = num / den
+
+
+class MM_RPADDLE_Class_Reg(MM_PADDLE_class):
+    def __init__(self, backbone, device, log_file, args):
+        super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
+        self.deg_reg_theta = args.deg_reg_theta
+        if self.deg_reg_theta == 1:
+            # self.reg_theta = (self.kappa/(self.args.shots*self.args.n_class_support + self.args.n_query))*1000
+            self.reg_theta = self.kappa
+
+    def update_theta(self, samples, all_u):
+
+        _, _, feature_dim = samples.size()
+        if self.beta == 2.0 and self.deg_reg_theta == 1:
+            # TODO : SOlveur direct
+            # equation to solve is a degree 2 polynomial
+            c = ((1 - self.beta) / 2) * (self.rho_beta(samples))
+            b = (feature_dim * (1 - 1 / self.beta) - self.kappa) * all_u
+            if self.reg_theta == 0:
+                self.theta = -c / b
+                return
+            a_pos = self.reg_theta
+            # a_neg = -self.reg_theta
+
+            # delta = b ** 2 - 4 * a_pos * c
+
+            delta_pos = b**2 - 4 * a_pos * c
+            # delta_neg = b**2 - 4 * a_neg * c
+            theta_pos = ((-b + torch.sqrt(delta_pos)) / (2 * a_pos)) + 10e-14
+            # Removed since regularizing towards 1 makes no sense if no covariance is estimated at the same time
+            # theta_neg = ((-b + torch.sqrt(delta_neg)) / (2 * a_neg)) + 10e-14
+
+            # self.theta = torch.where(theta_pos > 1, theta_pos, theta_neg)
+            self.theta = theta_pos
