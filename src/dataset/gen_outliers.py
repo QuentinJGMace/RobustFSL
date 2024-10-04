@@ -10,6 +10,7 @@ def generate_outliers(
     outlier_params=None,
     is_support=False,
     save_mult_outlier_distrib=False,
+    ood_dict=None,
 ):
     """
     Api level function to randomly generates outliers for the given features and labels.
@@ -57,9 +58,17 @@ def generate_outliers(
     mult = None
 
     # generates the outliers
-    new_features[mask_outliers], mult = OUTLIER_FUNCTIONS[outlier_params["name"]](
-        all_features, indices[mask_outliers], outlier_params=outlier_params
-    )
+    if outlier_params["name"] != "ood":
+        new_features[mask_outliers], mult = OUTLIER_FUNCTIONS[outlier_params["name"]](
+            all_features, indices[mask_outliers], outlier_params=outlier_params
+        )
+    else:
+        new_features[mask_outliers], mult = ood_outliers(
+            all_features,
+            indices[mask_outliers],
+            outlier_params=outlier_params,
+            ood_dict=ood_dict,
+        )
 
     new_features[~mask_outliers] = all_features[indices[~mask_outliers]]
 
@@ -114,10 +123,30 @@ def swap_images(
 
     perm = torch.randperm(len(features))
     indices_outliers = perm[: len(indices)]
-    # print(len(features))
-    # print(indices)
-    # print(indices_outliers)
+
     return features[indices_outliers], None
+
+
+def ood_outliers(
+    features: torch.Tensor,
+    indices: torch.Tensor,
+    outlier_params: CfgNode = None,
+    ood_dict: dict = None,
+):
+    """
+    Generate outliers by replacing the features with an OOD image.
+
+    Args:
+        features : Features to generate outliers from.
+        indices : Indices of the features to generate outliers from.
+        outlier_params : Parameters for the outlier generation.
+        ood_dict : Dictionary containing the OOD features (and labels but we don't care).
+    """
+    # Select random indices in the ood dataset
+
+    perm = torch.randperm(len(ood_dict["features"]))
+
+    return ood_dict["features"][perm[: len(indices)]].to(features.device), None
 
 
 OUTLIER_FUNCTIONS = {

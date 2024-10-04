@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 import os
-import random
+import pickle
 import json
 import torch
 from torch.utils.data import Dataset
@@ -66,3 +66,13 @@ def collate_fn(batch):
         "pixel_values": torch.stack([x["pixel_values"] for x in batch]),
         "labels": torch.tensor([x["labels"] for x in batch]),
     }
+
+
+def save_pickle(file, data):
+    with open(file, "wb") as f:
+        pickle.dump(data, f)
+
+
+def load_pickle(file):
+    with open(file, "rb") as f:
+        return pickle.load(f)

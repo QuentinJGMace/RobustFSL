@@ -1,8 +1,10 @@
+import os
 import torch
 import torchvision.transforms as T
 
 from src.dataset.transform import *
 from src.dataset.base_classes import DatasetWrapper
+from src.dataset.utils import load_pickle
 
 
 def build_transform(
@@ -114,3 +116,24 @@ def initialize_data_loaders(args, dataset, preprocess):
     }
 
     return data_loaders
+
+
+def load_features(args, dataset, set_name="support"):
+
+    if set_name == "support":
+        used_set = args.used_set_support
+    elif set_name == "query":
+        used_set = args.used_set_query
+    elif set_name == "mean":
+        used_set = "train_mean"
+    elif set_name in ["train", "val", "test"]:
+        used_set = set_name
+    else:
+        raise ValueError("Invalid set_name")
+    file_path = os.path.join(
+        f"data/{dataset}/saved_features/{used_set}_features_{args.backbone}.pkl"
+    )
+
+    extracted_features = load_pickle(file_path)
+
+    return extracted_features
