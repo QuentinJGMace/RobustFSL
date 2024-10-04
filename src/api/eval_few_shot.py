@@ -20,6 +20,7 @@ from src.samplers import CategoriesSampler_few_shot, SAMPLERS
 from src.api.extract_features import extract_features
 from src.dataset import DATASET_LIST
 from src.dataset import build_data_loader
+from src.dataset.builders import load_features
 from src.dataset.gen_outliers import generate_outliers
 from src.methods import get_method_builder
 
@@ -133,6 +134,13 @@ class Evaluator_few_shot:
             extracted_features_dic_mean,
         )
 
+    def load_ood_features(self):
+
+        ood_dict = load_features(
+            self.args, self.args.outlier_params.ood_dataset, set_name="train"
+        )
+        return ood_dict
+
     def run_full_evaluation(self, backbone, preprocess, return_results=False):
         """
         Run the full evaluation process over all tasks.
@@ -164,6 +172,11 @@ class Evaluator_few_shot:
         labels_query = extracted_features_dic_query["labels"]
         mean_features = extracted_features_dic_mean["mean_train"]
 
+        if self.args.outlier_params.name == "ood":
+            ood_dict = self.load_ood_features()
+        else:
+            ood_dict = None
+
         # Run evaluation for each task and collect results
         mean_accuracies, mean_times, mean_criterions = self.evaluate_tasks(
             backbone,
@@ -172,6 +185,7 @@ class Evaluator_few_shot:
             mean_features,
             features_query,
             labels_query,
+            ood_dict=ood_dict,
         )
 
         self.report_results(mean_accuracies, mean_times)
@@ -224,6 +238,7 @@ class Evaluator_few_shot:
         mean_features,
         features_query,
         labels_query,
+        ood_dict=None,
     ):
         """
         Evaluates the method
@@ -287,6 +302,7 @@ class Evaluator_few_shot:
                     outlier_params=self.args.outlier_params,
                     is_support=True,
                     save_mult_outlier_distrib=self.save_mult_outlier_distrib,
+                    ood_dict=ood_dict,
                 )
                 test_loader_support.append((new_features_s, new_labels_s))
                 (
@@ -302,6 +318,7 @@ class Evaluator_few_shot:
                     outlier_params=self.args.outlier_params,
                     is_support=False,
                     save_mult_outlier_distrib=self.save_mult_outlier_distrib,
+                    ood_dict=ood_dict,
                 )
                 test_loader_query.append((new_features_q, new_labels_q))
                 list_indices_outlier_query.append(indices_outliers_q)
