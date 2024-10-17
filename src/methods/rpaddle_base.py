@@ -18,6 +18,8 @@ class RPADDLE_base(AbstractMethod):
         self.n_support = self.args.shots * self.args.n_class_support
         if self.kappa != 0:
             self.eta = (2 / self.kappa) ** (1 / 2)
+        if hasattr(self.args, "temp"):
+            self.temp = self.args.temp
         self.init_info_lists()
 
     def init_prototypes(self, support, y_s):
@@ -89,7 +91,10 @@ class RPADDLE_base(AbstractMethod):
         # logits for sample n and class k is -1/2 (x_n - prototype_k)^T* (theta_n*Q_k)^2 * (x_n - prototype_k)
         n_query = samples.size(1)
         dist = self.compute_mahalanobis(samples, self.theta[:, -n_query:])
-        logits = -1 / 2 * dist
+        if self.temp:
+            logits = (-1 / 2) * self.temp * dist
+        else:
+            logits = (-1 / 2) * dist
 
         return logits
 
@@ -130,24 +135,49 @@ class RPADDLE_base(AbstractMethod):
             task_dic : dict {"x_s": torch.Tensor, "y_s": torch.Tensor, "x_q": torch.Tensor, "y_q": torch.Tensor}
             shot : int
         """
-        support, query, y_s, y_q, x_mean = (
+        support, query, y_s, y_q, x_mean, idx_outliers_support, idx_outliers_query = (
             task_dic["x_s"],
             task_dic["x_q"],
             task_dic["y_s"],
             task_dic["y_q"],
             task_dic["x_mean"],
+            task_dic["outliers_support"],
+            task_dic["outliers_query"],
         )
 
         support = support.to(self.device)
         query = query.to(self.device)
         y_s = y_s.long().squeeze(2).to(self.device)
         y_q = y_q.long().squeeze(2).to(self.device)
+        x_mean = x_mean.to(self.device)
+        idx_outliers_support = idx_outliers_support.to(self.device)
+        idx_outliers_query = idx_outliers_query.to(self.device)
 
         # Perform normalizations
         support, query = self.normalizer(support, query, train_mean=x_mean)
 
         # Run adaptation
-        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
+        self.run_method(
+            support=support,
+            query=query,
+            y_s=y_s,
+            y_q=y_q,
+            idx_outliers_support=idx_outliers_support,
+            idx_outliers_query=idx_outliers_query,
+        )
+
+        # pca = load_pca("random/pca/pca_mini.pkl")
+        # fig, ax = plot_pca(pca, support[0].cpu().numpy(), y_s[0].cpu().numpy(), save_path=f"random/pca/pca_support_outliers_0_{random.randint(0, 100000)}.png", plot=None, return_fig=True, markersize=10)
+        # fig, ax = plot_pca(pca, query[0].cpu().numpy(), y_q[0].cpu().numpy(), save_path=f"random/pca/pca_query_outliers_0_{random.randint(0, 100000)}.png", plot=(fig, ax), return_fig=True, markersize=10)
+        # fig, ax = plot_pca(pca, self.prototypes[0].cpu().numpy(), None, save_path=f"random/pca/pca_with_mean_outliers_0_{random.randint(0, 100000)}.png", plot=(fig, ax), return_fig=True, markersize=50)
+
+        # 1/0
+
+        # if len(self.theta.size()) == 2:
+        #     plot_outlier_detection(self.theta, self.n_support, idx_outliers_support, idx_outliers_query, save_path=f"random/outlier_detection/outliers_detection_outliers_ood32_support_{random.randint(0, 100000)}.png", plot=None, return_fig=False)
+        # elif len(self.theta.size()) == 3:
+        #     plot_outlier_detection_per_class(self.theta, self.n_support, idx_outliers_support, idx_outliers_query, save_path=f"random/outlier_detection/outliers_detection_per_class_reg_outliers_ood32_{random.randint(0, 100000)}.png", plot=None, return_fig=False)
+        # 1/0
 
         # Extract adaptation logs
         logs = self.get_logs()
@@ -210,7 +240,9 @@ class RPADDLE_base(AbstractMethod):
 
         return logs
 
-    def run_method(self, support, query, y_s, y_q):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query
+    ):
         """
         Runs the method
         inputs:
@@ -218,6 +250,8 @@ class RPADDLE_base(AbstractMethod):
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
         """
         raise NotImplementedError("This should not be called as this class is abstract")
 

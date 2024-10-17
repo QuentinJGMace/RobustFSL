@@ -64,15 +64,29 @@ class Baseline(AbstractMethod):
         preds_q = logits_q.argmax(2)
         return preds_q
 
-    def record_acc(self, query, y_q):
+    def record_acc(self, query, y_q, indexes_outliers_query=None):
         """
         inputs:
             query : torch.Tensor of shape [n_task, q_shot, feature_dim]
             y_q : torch.Tensor of shape [n_task, q_shot]
+            indexes_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
         """
 
         preds_q = self.predict(query)
-        self.test_acc.append((preds_q == y_q).float().mean(1, keepdim=True))
+        total_accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
+        self.test_acc.append(total_accuracy)
+
+        if (indexes_outliers_query is not None) and (
+            indexes_outliers_query.shape[1] != 0
+        ):
+            mask_outliers = torch.ones_like(y_q).bool().to(y_q.device)
+            mask_outliers.scatter_(1, indexes_outliers_query, False)
+
+            iid_accuracy = (preds_q[mask_outliers] == y_q[mask_outliers]).float()
+            iid_accuracy = iid_accuracy.mean(0).unsqueeze(0).expand((y_q.size(0), 1))
+            self.iid_test_acc.append(iid_accuracy)
+        else:
+            self.iid_test_acc.append(total_accuracy)
 
     def get_criterions(self, old_prototypes):
         """
@@ -90,7 +104,9 @@ class Baseline(AbstractMethod):
             "crit_prot": crit_prot,
         }
 
-    def run_method(self, support, query, y_s, y_q):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query
+    ):
         """
         Corresponds to the BASELINE inference
         inputs:
@@ -98,6 +114,8 @@ class Baseline(AbstractMethod):
             query : torch.Tensor of shape [n_task, q_shot, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, q_shot]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
 
         updates :
             self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]     # (centroids)
@@ -141,7 +159,9 @@ class Baseline(AbstractMethod):
                 criterions = self.get_criterions(old_prototypes)
                 self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
-            self.record_acc(query=query, y_q=y_q)
+            self.record_acc(
+                query=query, y_q=y_q, indexes_outliers_query=idx_outliers_query
+            )
 
     def run_task(self, task_dic, shot):
         """
@@ -157,6 +177,9 @@ class Baseline(AbstractMethod):
         x_q = task_dic["x_q"]  # [n_task, n_query, feature_dim]
         x_mean = task_dic["x_mean"]  # [n_task, feature_dim]
 
+        idx_outliers_support = task_dic["outliers_support"].to(self.device)
+        idx_outliers_query = task_dic["outliers_query"].to(self.device)
+
         # Transfer tensors to GPU if needed
         support = x_s.to(self.device)
         query = x_q.to(self.device)
@@ -167,7 +190,14 @@ class Baseline(AbstractMethod):
         support, query = self.normalizer(support, query, train_mean=x_mean)
 
         # Run adaptation
-        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
+        self.run_method(
+            support=support,
+            query=query,
+            y_s=y_s,
+            y_q=y_q,
+            idx_outliers_support=idx_outliers_support,
+            idx_outliers_query=idx_outliers_query,
+        )
 
         # Extract adaptation logs
         logs = self.get_logs()

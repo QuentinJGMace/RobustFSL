@@ -130,13 +130,17 @@ class MM_PADDLE_id(RPADDLE_base):
 
         self.prototypes = num / den
 
-    def run_method(self, support, query, y_s, y_q):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query
+    ):
         """
         inputs:
             support : torch.Tensor of shape [n_task, shot, feature_dim]
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
         """
         # self.logger.info(
         #     " ==> Executing RobustPADDLE with LAMBDA = {}".format(self.lambd)
@@ -171,7 +175,10 @@ class MM_PADDLE_id(RPADDLE_base):
             criterions = self.get_criterions(prototypes_old, theta_old, u_old)
             self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 
-        self.record_acc(y_q=y_q)
+        # print("Support : ", self.theta[0, :100].cpu().numpy())
+        # print("Query : ", self.theta[0, 100:].cpu().numpy())
+
+        self.record_acc(y_q=y_q, indexes_outliers_query=idx_outliers_query)
 
 
 class MM_PADDLE_glasso(MM_PADDLE_id):

@@ -120,7 +120,7 @@ class RobustTIM(AbstractMethod):
                 .to(self.device)
             )
 
-    def record_acc(self, query, y_q):
+    def record_acc(self, query, y_q, indexes_outliers_query=None):
         """
         inputs:
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
@@ -130,10 +130,24 @@ class RobustTIM(AbstractMethod):
         logits_q = self.get_logits(query, self.theta[:, -n_query:]).detach()
         preds_q = logits_q.argmax(2)
         q_probs = logits_q.softmax(2)
-        accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
-        self.test_acc.append(accuracy)
+        total_accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
+        self.test_acc.append(total_accuracy)
 
-    def run_method(self, support, query, y_s, y_q):
+        if (indexes_outliers_query is not None) and (
+            indexes_outliers_query.shape[1] != 0
+        ):
+            mask_outliers = torch.ones_like(y_q).bool().to(y_q.device)
+            mask_outliers.scatter_(1, indexes_outliers_query, False)
+
+            iid_accuracy = (preds_q[mask_outliers] == y_q[mask_outliers]).float()
+            iid_accuracy = iid_accuracy.mean(0).unsqueeze(0).expand((y_q.size(0), 1))
+            self.iid_test_acc.append(iid_accuracy)
+        else:
+            self.iid_test_acc.append(torch.full_like(total_accuracy, -1))
+
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query
+    ):
         """
         Corresponds to the baseline (no transductive inference = SimpleShot)
         inputs:
@@ -141,6 +155,8 @@ class RobustTIM(AbstractMethod):
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
 
         updates :
             self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
@@ -173,6 +189,8 @@ class RobustTIM(AbstractMethod):
         y_q = task_dic["y_q"]  # [n_task, n_query]
         x_s = task_dic["x_s"]  # [n_task, shot, feature_dim]
         x_q = task_dic["x_q"]  # [n_task, n_query, feature_dim]
+        idx_outliers_support = task_dic["outliers_support"].to(self.device)
+        idx_outliers_query = task_dic["outliers_query"].to(self.device)
 
         # Transfer tensors to GPU if needed
         support = x_s.to(self.device)  # [ N * (K_s + K_q), d]
@@ -194,7 +212,15 @@ class RobustTIM(AbstractMethod):
         self.init_params(support=support, y_s=y_s, query=query)
 
         # Run method
-        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q, shot=shot)
+        self.run_method(
+            support=support,
+            query=query,
+            y_s=y_s,
+            y_q=y_q,
+            idx_outliers_support=idx_outliers_support,
+            idx_outliers_query=idx_outliers_query,
+            shot=shot,
+        )
 
         # Extract adaptation logs
         logs = self.get_logs()
@@ -232,7 +258,9 @@ class RTIM_GD(RobustTIM):
         if not self.id_cov:
             self.q = torch.nn.Parameter(self.q)
 
-    def run_method(self, support, query, y_s, y_q, shot):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query, shot
+    ):
         """
         Corresponds to the TIM-GD inference
         inputs:
@@ -240,6 +268,8 @@ class RTIM_GD(RobustTIM):
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
 
         updates :
             self.prototypes : torch.Tensor of shape [n_task, num_class, feature_dim]
@@ -293,7 +323,7 @@ class RTIM_GD(RobustTIM):
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.backbone.eval()
-        self.record_acc(query=query, y_q=y_q)
+        self.record_acc(query=query, y_q=y_q, indexes_outliers_query=idx_outliers_query)
 
 
 # class Alpha_TIM(TIM):

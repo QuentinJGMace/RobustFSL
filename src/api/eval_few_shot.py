@@ -104,15 +104,21 @@ class Evaluator_few_shot:
         if not os.path.exists(
             f"data/{self.args.dataset}/saved_features/train_features_{self.args.backbone}.pkl"
         ):
-            extract_features(self.args, backbone, data_loaders["train"], "train")
+            extract_features(
+                self.args, backbone, data_loaders["train"], "train", self.device
+            )
         if not os.path.exists(
             f"data/{self.args.dataset}/saved_features/val_features_{self.args.backbone}.pkl"
         ):
-            extract_features(self.args, backbone, data_loaders["val"], "val")
+            extract_features(
+                self.args, backbone, data_loaders["val"], "val", self.device
+            )
         if not os.path.exists(
             f"data/{self.args.dataset}/saved_features/test_features_{self.args.backbone}.pkl"
         ):
-            extract_features(self.args, backbone, data_loaders["test"], "test")
+            extract_features(
+                self.args, backbone, data_loaders["test"], "test", self.device
+            )
 
         filepath_support = os.path.join(
             f"data/{self.args.dataset}/saved_features/{self.args.used_set_support}_features_{self.args.backbone}.pkl"
@@ -178,7 +184,12 @@ class Evaluator_few_shot:
             ood_dict = None
 
         # Run evaluation for each task and collect results
-        mean_accuracies, mean_times, mean_criterions = self.evaluate_tasks(
+        (
+            mean_accuracies,
+            mean_iid_accuracies,
+            mean_times,
+            mean_criterions,
+        ) = self.evaluate_tasks(
             backbone,
             features_support,
             labels_support,
@@ -188,11 +199,12 @@ class Evaluator_few_shot:
             ood_dict=ood_dict,
         )
 
-        self.report_results(mean_accuracies, mean_times)
+        self.report_results(mean_accuracies, mean_iid_accuracies, mean_times)
 
         if return_results:
             return {
                 "mean_accuracies": mean_accuracies,
+                "mean_iid_accuracies": mean_iid_accuracies,
                 "mean_times": mean_times,
                 "mean_criterions": mean_criterions,
             }
@@ -260,6 +272,7 @@ class Evaluator_few_shot:
         )
 
         results_task = []
+        results_task_iid = []
         results_task_time = []
         results_criterion = defaultdict(lambda: [])
 
@@ -370,8 +383,12 @@ class Evaluator_few_shot:
                 self.pred_mults["query"].append(method.mults["query"].detach())
 
             acc_mean, acc_conf = compute_confidence_interval(logs["acc"][:, -1])
+            acc_iid_mean, acc_iid_conf = compute_confidence_interval(
+                logs["iid_acc"][:, -1]
+            )
             timestamps, criterions = logs["timestamps"], logs["criterions"]
             results_task.append(acc_mean)
+            results_task_iid.append(acc_iid_mean)
             results_task_time.append(timestamps)
             for key in criterions.keys():
                 results_criterion[key].append(criterions[key])
@@ -400,19 +417,20 @@ class Evaluator_few_shot:
                     )
 
         mean_accuracies = np.mean(np.asarray(results_task))
+        mean_iid_accuracies = np.mean(np.asarray(results_task_iid))
         mean_times = np.mean(np.asarray(results_task_time))
         mean_criterions = {}
         for key in results_criterion.keys():
             mean_criterions[key] = np.mean(results_criterion[key], axis=0)
 
-        return mean_accuracies, mean_times, mean_criterions
+        return mean_accuracies, mean_iid_accuracies, mean_times, mean_criterions
 
     def get_method_val_param(self):
         # fixes for each method the name of the parameter on which validation is performed
         if self.args.name_method == "RPADDLE":
             self.val_param = self.args.lambd
 
-    def report_results(self, mean_accuracies, mean_times):
+    def report_results(self, mean_accuracies, mean_iid_accuracies, mean_times):
         """
         Reports the results of the evaluation
 
@@ -446,9 +464,15 @@ class Evaluator_few_shot:
                     self.args.shots, self.args.number_tasks, mean_accuracies
                 )
             )
+            self.logger.info(
+                "{}-shot mean iid test accuracy over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_iid_accuracies
+                )
+            )
 
             f.write(str(self.val_param) + "\t")
             f.write(str(round(100 * mean_accuracies, 2)) + "\t")
+            f.write(str(round(100 * mean_iid_accuracies, 2)) + "\t")
             f.write("\n")
             f.close()
 
@@ -486,12 +510,18 @@ class Evaluator_few_shot:
                 )
             )
             self.logger.info(
+                "{}-shot mean iid test accuracy over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_iid_accuracies
+                )
+            )
+            self.logger.info(
                 "{}-shot mean time over {} tasks: {}".format(
                     self.args.shots, self.args.number_tasks, mean_times
                 )
             )
             f.write(str(var) + "\t")
             f.write(str(round(100 * mean_accuracies, 1)) + "\t")
+            f.write(str(round(100 * mean_iid_accuracies, 1)) + "\t")
             f.write("\n")
             f.close()
 
@@ -499,6 +529,11 @@ class Evaluator_few_shot:
             self.logger.info(
                 "{}-shot mean test accuracy over {} tasks: {}".format(
                     self.args.shots, self.args.number_tasks, mean_accuracies
+                )
+            )
+            self.logger.info(
+                "{}-shot mean iid test accuracy over {} tasks: {}".format(
+                    self.args.shots, self.args.number_tasks, mean_iid_accuracies
                 )
             )
             self.logger.info(
