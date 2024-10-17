@@ -48,7 +48,7 @@ class CategoriesSampler_few_shot:
             self.n_class_support >= self.k_eff
         ), "n_class_support should be greater than k_eff"
         self.force_query_size = force_query_size
-        self.list_classes = [i for i in range(n_class)]
+        # self.list_classes = [i for i in range(n_class)]
 
     def create_list_classes(self, label_support, label_query):
         """
@@ -62,22 +62,24 @@ class CategoriesSampler_few_shot:
             m_ind_query : List of indexes where each class appears in the query set
         """
         label_support = np.array(label_support.cpu(), dtype=int)  # all data label
-        self.m_ind_support = []  # the data index of each class
-        for i in range(max(label_support) + 1):
+        self.m_ind_support = {}  # the data index of each class
+        for i in np.unique(label_support):
             # all data index of this class
             ind = np.argwhere(label_support == i).reshape(-1)
             ind = torch.from_numpy(ind)
-            self.m_ind_support.append(ind)
+            self.m_ind_support[i] = ind
 
         label_query = np.array(label_query.cpu())  # all data label
         assert (label_support == label_query).all()
         # print(max(label_support), min(label_support), len(np.unique(label_support)))
-        self.m_ind_query = []  # the data index of each class
-        for i in range(max(label_support) + 1):
+        self.m_ind_query = {}  # the data index of each class
+        for i in np.unique(label_query):
             # all data index of this class
             ind = np.argwhere(label_query == i).reshape(-1)
             ind = torch.from_numpy(ind)
-            self.m_ind_query.append(ind)
+            self.m_ind_query[i] = ind
+
+        self.list_classes = list(self.m_ind_support.keys())
 
 
 class AbstractSampler:

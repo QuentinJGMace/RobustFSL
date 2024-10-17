@@ -9,13 +9,16 @@ from src.dataset import build_transform
 from src.backbones import get_backbone
 from src.train_backbone.trainer import Trainer
 from src.train_backbone.utils import get_optimizer, get_scheduler, save_checkpoint
-from src.api.utils import parse_args, init_wandb, wrap_tqdm
+from src.api.utils import parse_args, wrap_tqdm  # , init_wandb
 
 if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    args = parse_args()
+
     preprocess_transform = build_transform(
-        size=84, jitter=True, enlarge=False, augment=True
+        size=args.input_size, jitter=True, enlarge=False, augment=True
     )
 
     args = parse_args()
@@ -59,15 +62,17 @@ if __name__ == "__main__":
         epochs=args.epochs,
         args=args,
     )
-    init_wandb(args)
-    tqdm_loop = wrap_tqdm(list(range(start_epoch, args.epochs)), disable_tqdm=True)
+    # init_wandb(args)
+    tqdm_loop = wrap_tqdm(
+        list(range(start_epoch, args.epochs)), disable_tqdm=args.disable_tqdm_trainer
+    )
 
     for epoch in tqdm_loop:
         trainer.do_epoch(
             epoch=epoch,
             scheduler=scheduler,
             print_freq=100,
-            disable_tqdm=True,
+            disable_tqdm=args.disable_tqdm_trainer,
             callback=None,
             model=backbone,
             alpha=args.alpha,
@@ -75,8 +80,14 @@ if __name__ == "__main__":
         )
 
         # Evaluation on validation set
-        prec1 = trainer.meta_val(model=backbone, disable_tqdm=True, epoch=epoch)
-        wandb.log({"acc_val": prec1, "epoch": epoch})
+        if epoch % args.eval_freq == 0:
+            acc_val = trainer.evaluate(
+                model=backbone, disable_tqdm=args.disable_tqdm_trainer
+            )
+            prec1 = trainer.meta_val(
+                model=backbone, disable_tqdm=args.disable_tqdm_trainer, epoch=epoch
+            )
+        # wandb.log({"acc_val": prec1, "epoch": epoch})
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
 

@@ -33,9 +33,14 @@ class Cifar10(DatasetBase):
         random.seed(0)
         random.shuffle(data)
 
-        train = data[: int(0.8 * len(data))]
-        val = data[int(0.8 * len(data)) : int(0.9 * len(data))]
-        test = data[int(0.9 * len(data)) :]
+        classes_train = [0, 2, 4, 6, 8]
+        classes_test = [1, 3, 5, 7, 9]
+
+        trainval = [d for d in data if d.label in classes_train]
+        test = [d for d in data if d.label in classes_test]
+
+        train = trainval[: int(0.8 * len(trainval))]
+        val = trainval[int(0.8 * len(trainval)) :]
 
         super().__init__(train_x=train, val=val, test=test)
 
