@@ -1,5 +1,6 @@
 import torch
-import wandb
+
+# import wandb
 import time
 import torch.nn as nn
 import numpy as np
@@ -14,7 +15,7 @@ class Trainer:
         self.args = args
         dataset = DATASET_LIST[args.dataset](self.args.dataset_path)
         self.train_loader = build_data_loader(
-            data_source=dataset.train,
+            data_source=dataset.train_x,
             batch_size=args.trainer_batch_size,
             is_train=True,
             shuffle=True,
@@ -22,6 +23,13 @@ class Trainer:
         )
         self.val_loader = build_data_loader(
             data_source=dataset.val,
+            batch_size=args.trainer_batch_size,
+            is_train=False,
+            shuffle=True,
+            tfm=preprocess,
+        )
+        self.test_loader = build_data_loader(
+            data_source=dataset.test,
             batch_size=args.trainer_batch_size,
             is_train=False,
             shuffle=True,
@@ -36,7 +44,8 @@ class Trainer:
         return -(one_hot_targets * logsoftmax).sum(1).mean()
 
     def log_to_wandb(self, losses, acc):
-        wandb.log({"loss": losses, "acc": acc})
+        # wandb.log({"loss": losses, "acc": acc})
+        pass
 
     def do_epoch(
         self,
@@ -58,9 +67,9 @@ class Trainer:
         steps_per_epoch = len(self.train_loader)
         end = time.time()
         tqdm_train_loader = wrap_tqdm(self.train_loader, disable_tqdm)
-        for i, (input, target) in enumerate(tqdm_train_loader):
+        for i, (data, target) in enumerate(tqdm_train_loader):
 
-            input, target = input.to(self.device), target.to(
+            data, target = data.to(self.device), target.to(
                 self.device, non_blocking=True
             )
 
@@ -70,17 +79,17 @@ class Trainer:
             if alpha > 0:  # Mixup augmentation
                 # generate mixed sample and targets
                 lam = np.random.beta(alpha, alpha)
-                rand_index = torch.randperm(input.size()[0]).cuda()
+                rand_index = torch.randperm(data.size()[0]).cuda()
                 target_a = smoothed_targets
                 target_b = smoothed_targets[rand_index]
-                mixed_input = lam * input + (1 - lam) * input[rand_index]
+                mixed_data = lam * data + (1 - lam) * data[rand_index]
 
-                output = model(mixed_input)
+                output = model(mixed_data)
                 loss = self.cross_entropy(output, target_a) * lam + self.cross_entropy(
                     output, target_b
                 ) * (1.0 - lam)
             else:
-                output = model(input)
+                output = model(data, feature=False)
                 loss = self.cross_entropy(output, smoothed_targets)
 
             # Backward pass
@@ -88,12 +97,12 @@ class Trainer:
             loss.backward()
             optimizer.step()
             prec1 = (output.argmax(1) == target).float().mean()
-            top1.update(prec1.item(), input.size(0))
+            top1.update(prec1.item(), data.size(0))
             if not disable_tqdm:
                 tqdm_train_loader.set_description("Acc {:.2f}".format(top1.avg))
 
             # Measure accuracy and record loss
-            losses.update(loss.item(), input.size(0))
+            losses.update(loss.item(), data.size(0))
             batch_time.update(time.time() - end)
             end = time.time()
 
@@ -130,17 +139,38 @@ class Trainer:
             )
         return new_targets
 
+    def evaluate(self, model, disable_tqdm):
+        top1 = AverageMeter()
+        model.eval()
+
+        with torch.no_grad():
+            tqdm_val_loader = wrap_tqdm(self.val_loader, disable_tqdm)
+            for i, (datas, target) in enumerate(tqdm_val_loader):
+                datas, target = datas.to(self.device), target.to(
+                    self.device, non_blocking=True
+                )
+                output = model(datas, feature=False)
+                acc = (output.argmax(1) == target).float().mean()
+                top1.update(acc.item())
+                if not disable_tqdm:
+                    tqdm_val_loader.set_description("Acc {:.2f}".format(top1.avg * 100))
+
+        if disable_tqdm:
+            print(f"Val Acc {top1.avg * 100}")
+
+        return top1.avg
+
     def meta_val(self, model, disable_tqdm, epoch):
         top1 = AverageMeter()
         model.eval()
 
         with torch.no_grad():
-            tqdm_test_loader = wrap_tqdm(self.val_loader, disable_tqdm)
-            for i, (inputs, target) in enumerate(tqdm_test_loader):
-                inputs, target = inputs.to(self.device), target.to(
+            tqdm_test_loader = wrap_tqdm(self.test_loader, disable_tqdm)
+            for i, (datas, target) in enumerate(tqdm_test_loader):
+                datas, target = datas.to(self.device), target.to(
                     self.device, non_blocking=True
                 )
-                output = model(inputs, feature=True)[0].cuda(0)
+                output = model(datas, feature=True)[0].cuda(0)
                 train_out = output[: self.args.meta_val_way * self.args.meta_val_shot]
                 train_label = target[: self.args.meta_val_way * self.args.meta_val_shot]
                 test_out = output[self.args.meta_val_way * self.args.meta_val_shot :]
@@ -156,6 +186,9 @@ class Trainer:
                     tqdm_test_loader.set_description(
                         "Acc {:.2f}".format(top1.avg * 100)
                     )
+
+        if disable_tqdm:
+            print(f"Epoch {epoch} - Meta Acc {top1.avg * 100}")
 
         return top1.avg
 
