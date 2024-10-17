@@ -13,7 +13,9 @@ class Paddle_GD(KM):
         self.lr = args.lr
         self.init_info_lists()
 
-    def run_method(self, support, query, y_s, y_q):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query
+    ):
         """
         Corresponds to the PADDLE-GD inference (ablation)
         inputs:
@@ -21,6 +23,8 @@ class Paddle_GD(KM):
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
 
         updates :
             self.u : torch.Tensor of shape [n_task, n_query]
@@ -73,4 +77,4 @@ class Paddle_GD(KM):
             criterions = self.get_criterions(w_old, u_old)
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
-        self.record_acc(y_q=y_q)
+        self.record_acc(y_q=y_q, idx_outliers_query=idx_outliers_query)

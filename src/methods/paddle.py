@@ -80,7 +80,9 @@ class Paddle(KM):
         den = self.u.sum(1) + y_s_one_hot.sum(1)
         self.w = torch.div(num, den.unsqueeze(2))
 
-    def run_method(self, support, query, y_s, y_q):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query
+    ):
         """
         Corresponds to the PADDLE inference
         inputs:
@@ -88,6 +90,8 @@ class Paddle(KM):
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
 
         updates :
             self.u : torch.Tensor of shape [n_task, n_query, num_class]         (soft labels)
@@ -120,4 +124,4 @@ class Paddle(KM):
             criterions = self.get_criterions(w_old, u_old)
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
-        self.record_acc(y_q=y_q)
+        self.record_acc(y_q=y_q, indexes_outliers_query=idx_outliers_query)

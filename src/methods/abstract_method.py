@@ -38,6 +38,7 @@ class AbstractMethod(nn.Module):
         self.timestamps = []
         self.criterions = defaultdict(lambda: [])
         self.test_acc = []
+        self.iid_test_acc = []
 
     def record_convergence(self, timestamp, criterions):
         """
@@ -63,14 +64,28 @@ class AbstractMethod(nn.Module):
         plt.savefig(filepath)
         plt.close()
 
-    def record_acc(self, y_q):
+    def record_acc(self, y_q, indexes_outliers_query=None):
         """
         inputs:
             y_q : torch.Tensor of shape [n_task, n_query] :
+            indexes_outliers_query : torch.Tensor of shape [n_task, n_outliers_query] : indexes of the outliers in the query set
         """
         preds_q = self.predict()
-        accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
-        self.test_acc.append(accuracy)
+        total_accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
+
+        self.test_acc.append(total_accuracy)
+
+        if (indexes_outliers_query is not None) and (
+            indexes_outliers_query.shape[1] != 0
+        ):
+            mask_outliers = torch.ones_like(y_q).bool().to(y_q.device)
+            mask_outliers.scatter_(1, indexes_outliers_query, False)
+
+            iid_accuracy = (preds_q[mask_outliers] == y_q[mask_outliers]).float()
+            iid_accuracy = iid_accuracy.mean(0).unsqueeze(0).expand((y_q.size(0), 1))
+            self.iid_test_acc.append(iid_accuracy)
+        else:
+            self.iid_test_acc.append(total_accuracy)
 
     def get_logs(self):
         """
@@ -81,10 +96,12 @@ class AbstractMethod(nn.Module):
         for key in self.criterions.keys():
             self.criterions[key] = np.array(self.criterions[key])
         self.test_acc = torch.cat(self.test_acc, dim=1).cpu().numpy()
+        self.iid_test_acc = torch.cat(self.iid_test_acc, dim=1).cpu().numpy()
         return {
             "timestamps": self.timestamps,
             "criterions": self.criterions,
             "acc": self.test_acc,
+            "iid_acc": self.iid_test_acc,
         }
 
     def push_logs(self, info, verbose=False):

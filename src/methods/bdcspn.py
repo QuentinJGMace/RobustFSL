@@ -18,16 +18,27 @@ class BDCSPN(AbstractMethod):
         self.device = "cpu"  # actually can't be on cuda
         self.init_info_lists()
 
-    def record_acc(self, y_q, preds_q):
+    def record_acc(self, y_q, preds_q, idx_outliers_query):
         """
         inputs:
             y_q : torch.Tensor of shape [n_tasks, n_query]
             q_pred : torch.Tensor of shape [n_tasks, n_query]:
+            idx_outliers_query : torch.Tensor of shape [n_tasks, n_outliers_query]
         """
         preds_q = torch.from_numpy(preds_q)
         y_q = torch.from_numpy(y_q)
-        accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
-        self.test_acc.append(accuracy)
+        total_accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
+        self.test_acc.append(total_accuracy)
+
+        if (idx_outliers_query is not None) and (idx_outliers_query.shape[1] != 0):
+            mask_outliers = torch.ones_like(y_q).bool().to(y_q.device)
+            mask_outliers.scatter_(1, idx_outliers_query, False)
+
+            iid_accuracy = (preds_q[mask_outliers] == y_q[mask_outliers]).float()
+            iid_accuracy = iid_accuracy.mean(0).unsqueeze(0).expand((y_q.size(0), 1))
+            self.iid_test_acc.append(iid_accuracy)
+        else:
+            self.iid_test_acc.append(total_accuracy)
 
     def proto_rectification(self, y_s, support, query, shot):
         """
@@ -90,6 +101,9 @@ class BDCSPN(AbstractMethod):
         x_q = task_dic["x_q"]  # [n_task, n_query, feature_dim]
         x_mean = task_dic["x_mean"]
 
+        idx_outliers_support = task_dic["outliers_support"].to(self.device)
+        idx_outliers_query = task_dic["outliers_query"].to(self.device)
+
         # Extract features
         support = x_s.to(self.device)
         query = x_q.to(self.device)
@@ -105,14 +119,24 @@ class BDCSPN(AbstractMethod):
         y_q = y_q.numpy()
 
         # Run method
-        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q, shot=shot)
+        self.run_method(
+            support=support,
+            query=query,
+            y_s=y_s,
+            y_q=y_q,
+            idx_outliers_support=idx_outliers_query,
+            idx_outliers_query=idx_outliers_query,
+            shot=shot,
+        )
 
         # Extract adaptation logs
         logs = self.get_logs()
 
         return logs
 
-    def run_method(self, support, query, y_s, y_q, shot):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query, shot
+    ):
         """
         Corresponds to the BD-CSPN inference
         inputs:
@@ -120,6 +144,8 @@ class BDCSPN(AbstractMethod):
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
         """
         self.logger.info(" ==> Executing predictions on {} shot tasks ...".format(shot))
         out_list = []
@@ -137,4 +163,4 @@ class BDCSPN(AbstractMethod):
 
         n_tasks, n_query, feature_dim = query.shape
         out = np.stack(out_list, axis=0).reshape((n_tasks, n_query))
-        self.record_acc(y_q=y_q, preds_q=out)
+        self.record_acc(y_q=y_q, preds_q=out, idx_outliers_query=idx_outliers_query)

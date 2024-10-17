@@ -21,13 +21,17 @@ class MultNoisePaddle_GD2(RPADDLE_base):
         if not self.id_cov:
             self.q = torch.nn.Parameter(self.q)
 
-    def run_method(self, support, query, y_s, y_q):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query
+    ):
         """
         inputs:
             support : torch.Tensor of shape [n_task, shot, feature_dim]
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
         """
         # self.logger.info(
         #     " ==> Executing RobustPADDLE with LAMBDA = {}".format(self.lambd)
@@ -133,6 +137,7 @@ class MultNoisePaddle_GD2(RPADDLE_base):
             )
             self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 
-        # plt.plot(losses)
-        # plt.savefig("losses.png")
-        self.record_acc(y_q=y_q)
+        # plt.figure(random.randint(1, 100000))
+        # plt.scatter([i for i in range(len(losses))], losses)
+        # plt.savefig(f"losses_{random.randint(1, 100000)}.png")
+        self.record_acc(y_q=y_q, indexes_outliers_query=idx_outliers_query)

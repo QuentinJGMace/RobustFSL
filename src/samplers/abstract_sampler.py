@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from collections import defaultdict
 
 """This file defines the abstract base to all samplers in the project.
 A sampler is an object that yields batches of data (support + query indices) when iterated."""

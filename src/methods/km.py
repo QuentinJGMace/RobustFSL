@@ -53,15 +53,6 @@ class KM(AbstractMethod):
         weights = one_hot.transpose(1, 2).matmul(support)
         self.w = weights / counts
 
-    def record_acc(self, y_q):
-        """
-        inputs:
-            y_q : torch.Tensor of shape [n_task, n_query] :
-        """
-        preds_q = self.predict()
-        accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
-        self.test_acc.append(accuracy)
-
     def run_task(self, task_dic, shot):
         """
         inputs:
@@ -75,6 +66,8 @@ class KM(AbstractMethod):
         support = task_dic["x_s"]  # [n_task, shot, feature_dim]
         query = task_dic["x_q"]  # [n_task, n_query, feature_dim]
         x_mean = task_dic["x_mean"]  # [n_task, feature_dim]
+        idx_outliers_support = task_dic["outliers_support"].to(self.device)
+        idx_outliers_query = task_dic["outliers_query"].to(self.device)
 
         # Transfer tensors to GPU if needed
         support = support.to(self.device)
@@ -87,12 +80,33 @@ class KM(AbstractMethod):
         support, query = self.normalizer(support, query, train_mean=x_mean)
 
         # Run adaptation
-        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q)
+        self.run_method(
+            support=support,
+            query=query,
+            y_s=y_s,
+            y_q=y_q,
+            idx_outliers_support=idx_outliers_support,
+            idx_outliers_query=idx_outliers_query,
+        )
 
         # Extract adaptation logs
         logs = self.get_logs()
 
         return logs
+
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query
+    ):
+        """
+        inputs:
+            support : torch.Tensor of shape [n_task, shot, feature_dim]
+            query : torch.Tensor of shape [n_task, n_query, feature_dim]
+            y_s : torch.Tensor of shape [n_task, shot]
+            y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
+        """
+        pass
 
     def get_criterions(self, w_old, u_old):
         """

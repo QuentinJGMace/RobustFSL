@@ -26,6 +26,7 @@ class TIM(AbstractMethod):
         self.timestamps = []
         self.criterions = defaultdict(list)
         self.test_acc = []
+        self.iid_test_acc = []
         self.losses = []
 
     def get_logits(self, samples):
@@ -83,7 +84,7 @@ class TIM(AbstractMethod):
         q_probs = logits_q.softmax(2)
         return q_probs
 
-    def record_acc(self, query, y_q):
+    def record_acc(self, query, y_q, idx_outliers_query=None):
         """
         inputs:
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
@@ -92,10 +93,22 @@ class TIM(AbstractMethod):
         logits_q = self.get_logits(query).detach()
         preds_q = logits_q.argmax(2)
         q_probs = logits_q.softmax(2)
-        accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
-        self.test_acc.append(accuracy)
+        total_accuracy = (preds_q == y_q).float().mean(1, keepdim=True)
+        self.test_acc.append(total_accuracy)
 
-    def run_method(self, support, query, y_s, y_q):
+        if (idx_outliers_query is not None) and (idx_outliers_query.shape[1] != 0):
+            mask_outliers = torch.ones_like(y_q).bool().to(y_q.device)
+            mask_outliers.scatter_(1, idx_outliers_query, False)
+
+            iid_accuracy = (preds_q[mask_outliers] == y_q[mask_outliers]).float()
+            iid_accuracy = iid_accuracy.mean(0).unsqueeze(0).expand((y_q.size(0), 1))
+            self.iid_test_acc.append(iid_accuracy)
+        else:
+            self.iid_test_acc.append(total_accuracy)
+
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query, shot
+    ):
         """
         Corresponds to the baseline (no transductive inference = SimpleShot)
         inputs:
@@ -136,6 +149,8 @@ class TIM(AbstractMethod):
         x_s = task_dic["x_s"]  # [n_task, shot, feature_dim]
         x_q = task_dic["x_q"]  # [n_task, n_query, feature_dim]
         x_mean = task_dic["x_mean"]  # [feature_dim]
+        idx_outliers_support = task_dic["outliers_support"].to(self.device)
+        idx_outliers_query = task_dic["outliers_query"].to(self.device)
 
         # Transfer tensors to GPU if needed
         support = x_s.to(self.device)  # [ N * (K_s + K_q), d]
@@ -155,7 +170,15 @@ class TIM(AbstractMethod):
         self.init_weights(support=support, y_s=y_s, query=query)
 
         # Run method
-        self.run_method(support=support, query=query, y_s=y_s, y_q=y_q, shot=shot)
+        self.run_method(
+            support=support,
+            query=query,
+            y_s=y_s,
+            y_q=y_q,
+            idx_outliers_support=idx_outliers_support,
+            idx_outliers_query=idx_outliers_query,
+            shot=shot,
+        )
 
         # Extract adaptation logs
         logs = self.get_logs()
@@ -183,7 +206,9 @@ class TIM_GD(TIM):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.lr = float(args.lr_tim)
 
-    def run_method(self, support, query, y_s, y_q, shot):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query, shot
+    ):
         """
         Corresponds to the TIM-GD inference
         inputs:
@@ -191,6 +216,8 @@ class TIM_GD(TIM):
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
 
         updates :
             self.weights : torch.Tensor of shape [n_task, num_class, feature_dim]
@@ -230,7 +257,7 @@ class TIM_GD(TIM):
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.backbone.eval()
-        self.record_acc(query=query, y_q=y_q)
+        self.record_acc(query=query, y_q=y_q, idx_outliers_query=idx_outliers_query)
 
 
 class Alpha_TIM(TIM):
@@ -243,7 +270,9 @@ class Alpha_TIM(TIM):
         if not isinstance(self.alpha_values, list):
             self.alpha_values = [self.alpha_values] * 3
 
-    def run_method(self, support, query, y_s, y_q, shot):
+    def run_method(
+        self, support, query, y_s, y_q, idx_outliers_support, idx_outliers_query, shot
+    ):
         """
         Corresponds to the ALPHA-TIM inference
         inputs:
@@ -251,6 +280,8 @@ class Alpha_TIM(TIM):
             query : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
             y_q : torch.Tensor of shape [n_task, n_query]
+            idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
 
         updates :
             self.weights : torch.Tensor of shape [n_task, num_class, feature_dim]
@@ -332,4 +363,4 @@ class Alpha_TIM(TIM):
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
         self.backbone.eval()
-        self.record_acc(query=query, y_q=y_q)
+        self.record_acc(query=query, y_q=y_q, idx_outliers_query=idx_outliers_query)
