@@ -23,6 +23,12 @@ class MM_PADDLE_id(RPADDLE_base):
         self.eps = 1e-12
         self.temp = self.args.temp
 
+        if hasattr(self.args, "threshold"):
+            self.soft_threshold = True
+            self.threshold = self.args.threshold
+        else:
+            self.soft_threshold = False
+
     def rho(self, samples):
         """
         Computes the rho function
@@ -105,6 +111,13 @@ class MM_PADDLE_id(RPADDLE_base):
                 / self.p
                 * ((all_u * self.rho_beta(samples)).sum(dim=-1))
             ) ** (1 / (self.beta - 1))
+
+        if self.soft_threshold:
+            self.theta = torch.sign(self.theta) * (
+                torch.maximum(
+                    self.theta.abs() - self.threshold, torch.ones_like(self.theta)
+                )
+            )
 
     def update_prot(self, samples, all_u):
         """
