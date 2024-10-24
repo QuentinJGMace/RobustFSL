@@ -34,6 +34,9 @@ class PT_MAP(AbstractMethod):
         query = task_dic["x_q"]  # [n_task, n_query, feature_dim]
         x_mean = task_dic["x_mean"]  # [n_task, feature_dim]
 
+        indexes_outliers_support = task_dic["outliers_support"].to(self.device)
+        indexes_outliers_query = task_dic["outliers_query"].to(self.device)
+
         # Transfer tensors to GPU if needed
         support = support.to(self.device)
         query = query.to(self.device)
@@ -46,7 +49,12 @@ class PT_MAP(AbstractMethod):
 
         # Run adaptation
         self.run_method(
-            support_features=support, query_features=query, y_s=y_s, y_q=y_q
+            support_features=support,
+            query_features=query,
+            y_s=y_s,
+            y_q=y_q,
+            indexes_outliers_support=indexes_outliers_support,
+            indexes_outliers_query=indexes_outliers_query,
         )
 
         # Extract adaptation logs
@@ -54,13 +62,23 @@ class PT_MAP(AbstractMethod):
 
         return logs
 
-    def run_method(self, support_features, query_features, y_s, y_q):
+    def run_method(
+        self,
+        support_features,
+        query_features,
+        y_s,
+        y_q,
+        indexes_outliers_support,
+        indexes_outliers_query,
+    ):
         """
         Args :
             support_features : torch.Tensor of shape [n_task, n_support, feature_dim]
             query_features : torch.Tensor of shape [n_task, n_query, feature_dim]
             y_s : torch.Tensor of shape [n_task, n_support]
             y_q : torch.Tensor of shape [n_task, n_query]
+            indexes_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
+            indexes_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
         """
         support_labels, query_labels = y_s, y_q
 
@@ -81,7 +99,9 @@ class PT_MAP(AbstractMethod):
         probs_s = self.get_probas(support_features).cpu()
         probs_q = self.get_probas(query_features).cpu()
 
-        self.record_acc(probs_q, query_labels)
+        self.record_acc(
+            probs_q, query_labels, indexes_outliers_query=indexes_outliers_query
+        )
 
     def compute_optimal_transport(self, M, r, c, epsilon=1e-6):
         """
@@ -150,7 +170,7 @@ class PT_MAP(AbstractMethod):
         delta = new_prototypes - self.prototypes
         self.prototypes += self.alpha * delta
 
-    def record_acc(self, probs_q, y_q):
+    def record_acc(self, probs_q, y_q, indexes_outliers_query=None):
         """
         Records the accuracy for each task
 
@@ -159,5 +179,18 @@ class PT_MAP(AbstractMethod):
             y_q: torch.Tensor of shape [n_task, n_query]
         """
         preds_q = probs_q.argmax(2)
-        accuracy = (preds_q.cpu() == y_q.cpu()).float().mean(1, keepdim=True)
-        self.test_acc.append(accuracy)
+        total_accuracy = (preds_q.cpu() == y_q.cpu()).float().mean(1, keepdim=True)
+
+        self.test_acc.append(total_accuracy)
+
+        if (indexes_outliers_query is not None) and (
+            indexes_outliers_query.shape[1] != 0
+        ):
+            mask_outliers = torch.ones_like(y_q).bool().to(y_q.device)
+            mask_outliers.scatter_(1, indexes_outliers_query, False)
+
+            iid_accuracy = (preds_q[mask_outliers] == y_q[mask_outliers]).float()
+            iid_accuracy = iid_accuracy.mean(0).unsqueeze(0).expand((y_q.size(0), 1))
+            self.iid_test_acc.append(iid_accuracy)
+        else:
+            self.iid_test_acc.append(total_accuracy)

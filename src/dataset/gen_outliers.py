@@ -149,6 +149,47 @@ def ood_outliers(
     return ood_dict["features"][perm[: len(indices)]].to(features.device), None
 
 
+def random_disturb_dimensions(
+    features: torch.Tensor,
+    indices: torch.Tensor,
+    outlier_params: CfgNode = None,
+):
+    """
+    Generate outliers by perturbing random dimensions of the features.
+
+    Args:
+        features : Features to generate outliers from.
+        indices : Indices of the features to generate outliers from.
+        outlier_params : Parameters for the outlier generation.
+    """
+    # Select random indices
+    n_features = features.size(1)
+    prop_perturbed_features = (
+        outlier_params["prop_perturbed_features"]
+        if "prop_perturbed_features" in outlier_params
+        else 0.3
+    )
+    mask = torch.rand(len(indices), n_features) < prop_perturbed_features
+
+    perturbation_type = (
+        outlier_params["perturbation_type"]
+        if "perturbation_type" in outlier_params
+        else "randn"
+    )
+
+    outliers = torch.clone(features[indices])
+
+    if perturbation_type == "randn":
+        std = outlier_params["std"] if "std" in outlier_params else 0.1
+        outliers[mask] += std * torch.randn_like(outliers[mask])
+    elif perturbation_type == "mult":
+        mult = (
+            outlier_params["mult_disturb"] if "mult_disturb" in outlier_params else 10
+        )
+        outliers[mask] *= (mult - 1) * (torch.rand_like(outliers[mask])) + 1
+    return outliers, None
+
+
 OUTLIER_FUNCTIONS = {
     "zeros": lambda x, indices, outlier_params=None: (
         torch.zeros_like(x[indices]),
@@ -162,5 +203,6 @@ OUTLIER_FUNCTIONS = {
     "mult_unif": gen_mult_unif_outliers,
     "mult_randn": gen_mult_randn_outliers,
     "swap_images": swap_images,
+    "disturb_features": random_disturb_dimensions,
     # TODO : multiply 30% of features by a scalar
 }
