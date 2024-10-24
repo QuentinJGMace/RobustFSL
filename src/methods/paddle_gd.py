@@ -77,4 +77,4 @@ class Paddle_GD(KM):
             criterions = self.get_criterions(w_old, u_old)
             self.record_convergence(timestamp=t1 - t0, criterions=criterions)
 
-        self.record_acc(y_q=y_q, idx_outliers_query=idx_outliers_query)
+        self.record_acc(y_q=y_q, indexes_outliers_query=idx_outliers_query)
