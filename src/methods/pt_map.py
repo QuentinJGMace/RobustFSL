@@ -96,8 +96,8 @@ class PT_MAP(AbstractMethod):
             self.record_convergence(time.time() - t0, {})
 
         # get final accuracy and return it
-        probs_s = self.get_probas(support_features).cpu()
-        probs_q = self.get_probas(query_features).cpu()
+        probs_s = self.get_probas(support_features)
+        probs_q = self.get_probas(query_features)
 
         self.record_acc(
             probs_q, query_labels, indexes_outliers_query=indexes_outliers_query
