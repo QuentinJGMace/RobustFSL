@@ -6,6 +6,15 @@ from tqdm import tqdm
 from src.methods.utils import get_one_hot
 from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 
+import matplotlib.pyplot as plt
+from src.experiments.plot_utils import (
+    plot_pca,
+    load_pca,
+    plot_outlier_detection,
+    plot_outlier_detection_per_class,
+)
+import random
+
 
 class RPADDLE_base(AbstractMethod):
     def __init__(self, backbone, device, log_file, args):
@@ -174,7 +183,7 @@ class RPADDLE_base(AbstractMethod):
         # 1/0
 
         # if len(self.theta.size()) == 2:
-        #     plot_outlier_detection(self.theta, self.n_support, idx_outliers_support, idx_outliers_query, save_path=f"random/outlier_detection/outliers_detection_outliers_ood32_support_{random.randint(0, 100000)}.png", plot=None, return_fig=False)
+        #     plot_outlier_detection(self.theta, self.n_support, idx_outliers_support, idx_outliers_query, save_path=f"random/outlier_detection/outliers_detection_outliers_ood32_support_thresholding_OOD_dirichlet_teeeeeeest_{random.randint(0, 100000)}.png", plot=None, return_fig=False)
         # elif len(self.theta.size()) == 3:
         #     plot_outlier_detection_per_class(self.theta, self.n_support, idx_outliers_support, idx_outliers_query, save_path=f"random/outlier_detection/outliers_detection_per_class_reg_outliers_ood32_{random.randint(0, 100000)}.png", plot=None, return_fig=False)
         # 1/0
@@ -189,7 +198,7 @@ class RPADDLE_base(AbstractMethod):
             if self.theta.size(1) == support.size(1) + query.size(1):
                 self.mults["support"] = tau[:, : support.size(1)]
                 self.mults["query"] = tau[:, support.size(1) :]
-                with open("thetas_mm_reg_0.1_inv_eps.txt", "a") as f:
+                with open("thetas_mm_red_curve.txt", "a") as f:
                     f.write(f"N shots : {self.args.shots}" + "\n")
                     f.write(
                         f"N outliers support : {self.args.n_outliers_support}, N outliers query : {self.args.n_outliers_query}"

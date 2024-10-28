@@ -8,6 +8,7 @@ from tqdm import tqdm
 import torch
 import torch.backends.cudnn as cudnn
 
+from src.api.cfg_utils import CfgNode
 from src.backbones.utils import get_backbone, load_checkpoint
 from src.logger.logger import Logger, get_log_file
 from src.api.eval_few_shot import Evaluator_few_shot
@@ -119,46 +120,92 @@ if __name__ == "__main__":
     # fig, ax = plt.subplots(1, 1)
 
     experiment_dicts = []
+    methods = [
+        # "tim",
+        "paddle",
+        "mm_rpaddle",
+        # "mm_rpaddle_reg",
+        # "rpaddle2",
+        # "bdcspn",
+        # "ici", # ici takes a very long time, taking it out for now
+        # "laplacianshot",
+        # "pt_map",
+        # "baseline",
+        # "mm_rpaddle_class",
+        # "mm_rpaddle_class_reg",
+    ]
+    outlier_params = [
+        CfgNode(
+            {
+                "name": "ood",  # Choose between 'mult_unif', 'randn", "zero", "mult_randn", swap_images
+                # "max_outlier_mult": 10,
+                "ood_dataset": "cifar10",
+                # "prop_perturbed_features": 0.3,
+                # "perturbation_type": "mult",
+                # "mult_disturb": 10,
+            }
+        )
+    ]
+    n_class_support = [20]
+    sampling_method = ["dirichlet"]
     experiment_dicts.append(
         {
-            "method": ["tim", "paddle", "mm_rpaddle", "mm_rpaddle_reg", "rpaddle2"],
+            "method": methods,
             "shots": [5],
-            "n_outliers_support": [i for i in range(0, 30, 3)],
+            "n_outliers_support": [i for i in range(0, 50, 6)],
+            "outlier_params": outlier_params,
+            "n_class_support": n_class_support,
+            "sampling_method": sampling_method,
         }
     )
     experiment_dicts.append(
         {
-            "method": ["tim", "paddle", "mm_rpaddle", "mm_rpaddle_reg", "rpaddle2"],
+            "method": methods,
             "shots": [5],
-            "n_outliers_query": [i for i in range(0, 35, 5)],
+            "n_outliers_query": [i for i in range(0, 81, 10)],
+            "outlier_params": outlier_params,
+            "n_class_support": n_class_support,
+            "sampling_method": sampling_method,
         }
     )
     experiment_dicts.append(
         {
-            "method": ["tim", "paddle", "mm_rpaddle", "mm_rpaddle_reg", "rpaddle2"],
+            "method": methods,
             "shots": [10],
-            "n_outliers_support": [i for i in range(0, 60, 6)],
+            "n_outliers_support": [i for i in range(0, 100, 12)],
+            "outlier_params": outlier_params,
+            "n_class_support": n_class_support,
+            "sampling_method": sampling_method,
         }
     )
     experiment_dicts.append(
         {
-            "method": ["tim", "paddle", "mm_rpaddle", "mm_rpaddle_reg", "rpaddle2"],
+            "method": methods,
             "shots": [10],
-            "n_outliers_query": [i for i in range(0, 35, 3)],
+            "n_outliers_query": [i for i in range(0, 81, 10)],
+            "outlier_params": outlier_params,
+            "n_class_support": n_class_support,
+            "sampling_method": sampling_method,
         }
     )
     experiment_dicts.append(
         {
-            "method": ["tim", "paddle", "mm_rpaddle", "mm_rpaddle_reg", "rpaddle2"],
+            "method": methods,
             "shots": [20],
-            "n_outliers_support": [i for i in range(0, 100, 10)],
+            "n_outliers_support": [i for i in range(0, 200, 24)],
+            "outlier_params": outlier_params,
+            "n_class_support": n_class_support,
+            "sampling_method": sampling_method,
         }
     )
     experiment_dicts.append(
         {
-            "method": ["tim", "paddle", "mm_rpaddle", "mm_rpaddle_reg", "rpaddle2"],
+            "method": methods,
             "shots": [20],
-            "n_outliers_query": [i for i in range(0, 35, 3)],
+            "n_outliers_query": [i for i in range(0, 81, 10)],
+            "outlier_params": outlier_params,
+            "n_class_support": n_class_support,
+            "sampling_method": sampling_method,
         }
     )
     # experiment_dicts.append(

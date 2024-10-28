@@ -119,6 +119,7 @@ if __name__ == "__main__":
     )
     backbone = get_backbone(args).to(device)
     checkpoint_path = args.ckpt_path
+    print(args.dataset)
     print(args.ckpt_path)
     print(args.backbone)
     print(checkpoint_path)
