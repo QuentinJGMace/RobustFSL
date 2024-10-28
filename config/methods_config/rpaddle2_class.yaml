@@ -1,0 +1,11 @@
+METHOD:
+  name_method: 'RPADDLE2_CLASS'
+  iter: 1000
+  lambd: 75
+  lr : 0.001
+  beta : 1.5
+  kappa : 0
+  id_cov : True
+  acc_clustering: False
+  tunable: False
+  plot: False

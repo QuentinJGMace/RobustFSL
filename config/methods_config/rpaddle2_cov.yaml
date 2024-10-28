@@ -1,0 +1,13 @@
+METHOD:
+  name_method: 'RPADDLE2_COV'
+  iter: 100
+  lambd: 75
+  lr : 0.001
+  beta : 1.5
+  p : 2
+  kappa : 1.1
+  eta : 1.
+  id_cov : False
+  acc_clustering: False
+  tunable: False
+  plot: True

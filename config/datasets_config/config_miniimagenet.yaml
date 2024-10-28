@@ -1,0 +1,18 @@
+DATA:
+    dataset: 'miniimagenet'
+    root: 'data'
+    dataset_path: 'data/miniimagenet/'
+    num_classes_train: 64
+    num_classes_test: 20
+    batch_size_loader: 256
+    enlarge: True
+    num_workers: 0
+    disable_random_resize: False
+    jitter: False
+    split_dir: 'split/mini'
+    input_size: 224
+    
+DISTRIBUTED:
+    cuda: True
+    seed: 2020
+    log_path: 'logs' # path to where log files will be saved 

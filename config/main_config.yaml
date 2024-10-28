@@ -1,0 +1,32 @@
+EVAL:
+    dataset: 'miniimagenet' # 'miniimagenet'        # Choose from: oxfordpets, eurosat, ucf101, caltech101, dtd, fgvcaircraft, food101, flowers102, stanfordcars, imagenet, sun397
+    method: 'mm_rpaddle'       # For zero-shot: 'em_dirichlet', 'hard_em_dirichlet', 'hard_kmeans', 'kl_kmeans', 'soft_kmeans', 'em_gaussian', 'em_gaussian_cov', 'inductive_clip'
+                                 # For few-shot: 'em_dirichlet', 'hard_em_dirichlet', 'paddle', 'alpha_tim', 'laplacian_shot', 'bdcspn'
+    number_tasks: 1000       # Number of tasks to evaluate
+    batch_size: 100            # Batch size for the evaluation
+    n_class_support: 20          # Number of different classes represented in the support
+    k_eff: 5                    # Number of different classes represented in the query
+    n_query: 120                   # Number of samples in the query set
+    shots: 5                  # Number of shots
+    log_path: '.log/'
+    save_results: True           # Save the results in a .txt file in results_zero_shot/ and results_few_shot/
+    used_test_set: 'test'        # Choose between 'val' or 'test'
+    used_set_support: 'test'
+    used_set_query: 'test'
+    n_outliers_support: 0
+    n_outliers_query: 0
+    outlier_params: 
+        name: 'ood'    # Choose between 'mult_unif', 'randn", "zero", "mult_randn", "swap_images"
+        max_outlier_mult: 10
+        ood_dataset: 'cifar10'
+        prop_perturbed_features : 0.3
+        perturbation_type: 'mult'
+        mult_disturb: 10
+    device: 0
+    T: 30                        # Temperature for defining the features
+    backbone: 'feat_resnet12' # 'resnet18' # 'feat_resnet12'             # CLIP's pretrained backbone
+    use_softmax_feature: True    # True to use the softmax features, False to use the visual embeddings directly
+    name: 'train_mini_resnet12' # 'train_resnet18_resume'
+    normalizer: 'default'
+    save_mult_outlier: False
+    sampling_method: 'dirichlet' # Choose between 'dirichlet', 'uniform' and 'balanced'

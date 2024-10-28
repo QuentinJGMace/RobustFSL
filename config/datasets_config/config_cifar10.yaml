@@ -1,0 +1,18 @@
+DATA:
+    dataset: 'cifar10'
+    root: 'data'
+    dataset_path: 'data/cifar10/'
+    num_classes_train: 10
+    num_classes_test: 10
+    batch_size_loader: 256
+    enlarge: True
+    num_workers: 0
+    disable_random_resize: False
+    jitter: False
+    split_dir: 'split/cifar10'
+    input_size: 32
+    
+DISTRIBUTED:
+    cuda: True
+    seed: 2020
+    log_path: 'logs' # path to where log files will be saved 

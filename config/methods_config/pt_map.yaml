@@ -1,0 +1,7 @@
+METHOD:
+  name_method: 'PT_MAP'
+  alpha_pt: 0.2
+  lam: 10
+  iter: 10
+  tunable: False
+  acc_clustering: False

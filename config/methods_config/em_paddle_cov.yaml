@@ -1,0 +1,17 @@
+METHOD:
+  name_method: 'EM-PADDLE'
+  iter: 3
+  beta: 1.1
+  p: 1
+  gamma_prox: 0.06
+  zeta1: 0.05
+  zeta2: 1.55
+  kappa: 10
+  omega1: 154
+  omega2: 0.2
+  reg_q: 0.01
+  auto_init: True
+  acc_clustering: False
+  tunable: False
+  batch_fsolve_size: 8
+  n_iter_prox : 50

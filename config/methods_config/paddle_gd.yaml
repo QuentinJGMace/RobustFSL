@@ -1,0 +1,8 @@
+METHOD:
+  name_method: 'PADDLE_GD'
+  iter: 1000
+  lambd: 75
+  lr: 0.1
+  acc_clustering: False
+  tunable: False
+  osef_beaucoup: 42
