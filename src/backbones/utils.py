@@ -59,10 +59,15 @@ def load_checkpoint(model, model_path, device, type="best"):
         for k, v in state_dict.items():
             if k.startswith("module."):
                 name = k[7:]
+                if name.startswith("fc."):
+                    continue
                 new_state_dict[name] = v
             elif k.startswith("encoder."):
                 name = k[8:]
+                if name.startswith("fc."):
+                    continue
                 new_state_dict[name] = v
+
                 # has_to_be_strict = False # no fully connected layer in this checkpoint
         # print(new_state_dict.keys())
         model.load_state_dict(new_state_dict, strict=has_to_be_strict)

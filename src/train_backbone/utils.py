@@ -32,7 +32,7 @@ def get_optimizer(
             nesterov=args.nesterov,
         ),
         "Adam": torch.optim.Adam(
-            backbone.parameters(), lr=args.lr, weight_decay=args.weight_decay
+            backbone.parameters(), lr=args.lr_backbone, weight_decay=args.weight_decay
         ),
     }
     return OPTIMIZER[args.optimizer_name]
