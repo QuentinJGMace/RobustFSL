@@ -1,0 +1,16 @@
+METHOD:
+  name_method: 'MM_RPADDLE_REG_DIAG'
+  iter: 20
+  lambd: 75
+  lr : 0.1
+  beta : 2.
+  deg_reg_theta: 1
+  kappa : 0
+  change_theta_reg: False
+  p: 2
+  id_cov : True
+  acc_clustering: False
+  tunable: False
+  plot: True
+  temp: 1
+  zeta: 0.01

@@ -1,0 +1,10 @@
+METHOD:
+  name_method: 'LAPLACIANSHOT'
+  knn: 3
+  lmd: 0.7
+  proto_rect: False
+  norm_type: 'CL2N' # ('CL2N', 'L2N', 'UN')
+  iter: 20
+  temp: 1
+  acc_clustering: False
+  tunable: False

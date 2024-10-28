@@ -1,0 +1,7 @@
+METHOD:
+  name_method: 'BASELINE'
+  temp: 15
+  lr_baseline: 1e-3
+  iter: 100
+  acc_clustering: False
+  tunable: False

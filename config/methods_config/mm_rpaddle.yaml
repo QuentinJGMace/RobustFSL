@@ -1,0 +1,15 @@
+METHOD:
+  name_method: 'MM_RPADDLE_ID'
+  iter: 20
+  lambd: 120
+  lr : 0.1
+  beta : 2.
+  kappa : 0
+  change_theta_reg: False
+  p: 2
+  id_cov : True
+  acc_clustering: False
+  tunable: False
+  plot: True
+  temp: 1
+  threshold: 0.1

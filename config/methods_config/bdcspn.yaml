@@ -1,0 +1,7 @@
+METHOD:
+  name_method: 'BDCSPN'
+  num_NN: 1
+  # norm_type: 'L2N' # ('CL2N', 'L2N', 'UN')
+  temp: 30.0
+  tunable: False
+  iter: -1 # the codes needs it but we don't care of the value
