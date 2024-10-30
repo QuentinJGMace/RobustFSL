@@ -1,21 +1,20 @@
-from .rpaddle_gd import MutlNoisePaddle_GD
-from .rpaddle_gd2 import MultNoisePaddle_GD2
-from .rpaddle_gd_class import MultNoisePaddle_GD2_class
-from .mm_rapddle_id import MM_PADDLE_id
-from .mm_rpaddle_reg import MM_RPADDLE_reg
-from .mm_rpaddle_class import MM_PADDLE_class, MM_RPADDLE_Class_Reg
-from .mm_rpaddle_reg_diag_cov import MM_RPADDLE_reg_sigmas, MM_RPADDLE_reg_diag
-from .em_rfsl import EM_RobustPaddle_ID
-from .em_rfsl_cov import EM_RobustPaddle
-from .paddle import Paddle
-from .paddle_gd import Paddle_GD
-from .tim import TIM_GD, Alpha_TIM
-from .rtim import RTIM_GD
-from .baseline import Baseline
-from .bdcspn import BDCSPN
-from .ici import ICI
-from .laplacianshot import LaplacianShot
-from .pt_map import PT_MAP
+from .rpaddle_gd import MultNoisePaddle_GD # SGD rpaddle
+from .rpaddle_gd_class import MultNoisePaddle_GD2_class # SGD rpaddle with theta depending on the class
+from .mm_rapddle_id import MM_PADDLE_id # Vanilla MM RPaddle
+from .mm_rpaddle_reg import MM_RPADDLE_reg # Regularised MM RPaddle
+from .mm_rpaddle_class import MM_PADDLE_class, MM_RPADDLE_Class_Reg # MM RPADDLE and regularised MMRPADDLE with thet depending on the class
+from .mm_rpaddle_reg_diag_cov import MM_RPADDLE_reg_sigmas, MM_RPADDLE_reg_diag # MM RPADDLE with some covariance estimate (homothety or diagonal)
+from .em_rfsl import EM_RobustPaddle_ID # EM RPaddle with identity covariance
+from .em_rfsl_cov import EM_RobustPaddle # EM RPaddle with covariance estimation (not used)
+from .paddle import Paddle # PADDLE
+from .paddle_gd import Paddle_GD # Gradient decent version of PADDLE
+from .tim import TIM_GD, Alpha_TIM # TIM and ALpha TIM (see corresponding papers)
+from .rtim import RTIM_GD # Attempt at making TIm robust
+from .baseline import Baseline # Simple gradient descent objective function
+from .bdcspn import BDCSPN # BDCSPN
+from .ici import ICI # ICI
+from .laplacianshot import LaplacianShot # LaplacianShot
+from .pt_map import PT_MAP # PT_MAP
 
 
 def get_method_builder(backbone, device, args, log_file):
@@ -29,7 +28,7 @@ def get_method_builder(backbone, device, args, log_file):
 
     # few-shot methods
     if args.name_method == "RPADDLE":
-        method_builder = MutlNoisePaddle_GD(**method_info)
+        method_builder = MultNoisePaddle_GD(**method_info)
     elif args.name_method == "BASELINE":
         method_builder = Baseline(**method_info)
     elif args.name_method == "BDCSPN":
@@ -40,8 +39,6 @@ def get_method_builder(backbone, device, args, log_file):
         method_builder = LaplacianShot(**method_info)
     elif args.name_method == "PT_MAP":
         method_builder = PT_MAP(**method_info)
-    elif args.name_method == "RPADDLE2":
-        method_builder = MultNoisePaddle_GD2(**method_info)
     elif args.name_method == "RPADDLE2_CLASS":
         method_builder = MultNoisePaddle_GD2_class(**method_info)
     elif args.name_method == "MM_RPADDLE_REG":

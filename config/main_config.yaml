@@ -6,7 +6,7 @@ EVAL:
     batch_size: 100            # Batch size for the evaluation
     n_class_support: 20          # Number of different classes represented in the support
     k_eff: 5                    # Number of different classes represented in the query
-    n_query: 120                   # Number of samples in the query set
+    n_query: 75                   # Number of samples in the query set
     shots: 5                  # Number of shots
     log_path: '.log/'
     save_results: True           # Save the results in a .txt file in results_zero_shot/ and results_few_shot/
@@ -23,10 +23,8 @@ EVAL:
         perturbation_type: 'mult'
         mult_disturb: 10
     device: 0
-    T: 30                        # Temperature for defining the features
     backbone: 'feat_resnet12' # 'resnet18' # 'feat_resnet12'             # CLIP's pretrained backbone
-    use_softmax_feature: True    # True to use the softmax features, False to use the visual embeddings directly
     name: 'train_mini_resnet12' # 'train_resnet18_resume'
-    normalizer: 'default'
+    normalizer: 'default' # default normalises from the entier query set, and returns value between 0 and 1 (except for pt_map since it really degrades performances)
     save_mult_outlier: False
     sampling_method: 'dirichlet' # Choose between 'dirichlet', 'uniform' and 'balanced'
