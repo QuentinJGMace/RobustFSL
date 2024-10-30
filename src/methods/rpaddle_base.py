@@ -6,17 +6,21 @@ from tqdm import tqdm
 from src.methods.utils import get_one_hot
 from src.methods.abstract_method import AbstractMethod, MinMaxScaler
 
-import matplotlib.pyplot as plt
-from src.experiments.plot_utils import (
-    plot_pca,
-    load_pca,
-    plot_outlier_detection,
-    plot_outlier_detection_per_class,
-)
-import random
+## Plotting imports, useful to debug and see behavior, uncomment if needed
+# import matplotlib.pyplot as plt
+# from src.experiments.plot_utils import (
+#     plot_pca,
+#     load_pca,
+#     plot_outlier_detection,
+#     plot_outlier_detection_per_class,
+# )
+# import random
 
 
 class RPADDLE_base(AbstractMethod):
+    """
+    Base class for RPADDLE methods
+    """
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
         self.lambd = args.lambd
@@ -33,6 +37,7 @@ class RPADDLE_base(AbstractMethod):
 
     def init_prototypes(self, support, y_s):
         """
+        Initialise the protoypes to the mean over the support set
         inputs:
             support : torch.Tensor of shape [n_task, shot, feature_dim]
             y_s : torch.Tensor of shape [n_task, shot]
@@ -175,6 +180,9 @@ class RPADDLE_base(AbstractMethod):
             idx_outliers_query=idx_outliers_query,
         )
 
+        ## Commented parts to plot debugging figures
+        ## Makes the code crash if uncommented on purpose to avoid plotting thousands of figures
+
         # pca = load_pca("random/pca/pca_mini.pkl")
         # fig, ax = plot_pca(pca, support[0].cpu().numpy(), y_s[0].cpu().numpy(), save_path=f"random/pca/pca_support_outliers_0_{random.randint(0, 100000)}.png", plot=None, return_fig=True, markersize=10)
         # fig, ax = plot_pca(pca, query[0].cpu().numpy(), y_q[0].cpu().numpy(), save_path=f"random/pca/pca_query_outliers_0_{random.randint(0, 100000)}.png", plot=(fig, ax), return_fig=True, markersize=10)
@@ -191,7 +199,7 @@ class RPADDLE_base(AbstractMethod):
         # Extract adaptation logs
         logs = self.get_logs()
 
-        # Stores mults
+        # Stores predicted thetas stats, unused in general
         if self.args.save_mult_outlier:
             self.mults = {}
             tau = self.theta ** (self.beta / (self.beta - 1))

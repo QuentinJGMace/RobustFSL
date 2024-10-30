@@ -9,18 +9,14 @@ from src.methods.rpaddle_base import RPADDLE_base
 
 
 class MM_PADDLE_id(RPADDLE_base):
+    """MM-PADDLE with identity covariance matrix
+    
+    """
     def __init__(self, backbone, device, log_file, args):
         super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
-        self.change_theta_reg = args.change_theta_reg
         if self.kappa != 0:
             self.eta = (2 / self.kappa) ** (1 / 2)
-        elif self.change_theta_reg:
-            raise ValueError(
-                "Kappa must be different from 0 if change_theta_reg is True"
-            )
-        if self.change_theta_reg:
-            self.p = args.p
-        self.eps = 1e-12
+        self.eps = 1e-12 # to avoid numerical instability
         self.temp = self.args.temp
 
         if hasattr(self.args, "threshold"):
@@ -95,23 +91,15 @@ class MM_PADDLE_id(RPADDLE_base):
             None
         """
         _, _, feature_dim = samples.size()
-        if not self.change_theta_reg:
-            self.theta = (
-                (self.beta - 1)
-                / 2
-                * 1
-                / (feature_dim * (1 - 1 / self.beta) - self.kappa)
-                * ((all_u * self.rho_beta(samples)).sum(dim=-1))
-            ) ** (1 / (self.beta - 1))
-        else:
-            self.theta = (
-                (self.beta - 1)
-                / 2
-                * (self.eta**self.p)
-                / self.p
-                * ((all_u * self.rho_beta(samples)).sum(dim=-1))
-            ) ** (1 / (self.beta - 1))
+        self.theta = (
+            (self.beta - 1)
+            / 2
+            * 1
+            / (feature_dim * (1 - 1 / self.beta) - self.kappa) # Kappa should be generally 0 here
+            * ((all_u * self.rho_beta(samples)).sum(dim=-1))
+        ) ** (1 / (self.beta - 1))
 
+        # Applies soft thresholding if needed
         if self.soft_threshold:
             self.theta = torch.sign(self.theta) * (
                 torch.maximum(
@@ -155,9 +143,6 @@ class MM_PADDLE_id(RPADDLE_base):
             idx_outliers_support : torch.Tensor of shape [n_task, n_outliers_support]
             idx_outliers_query : torch.Tensor of shape [n_task, n_outliers_query]
         """
-        # self.logger.info(
-        #     " ==> Executing RobustPADDLE with LAMBDA = {}".format(self.lambd)
-        # )
 
         t0 = time.time()
         y_s_one_hot = F.one_hot(y_s, self.n_class).to(self.device)
@@ -168,6 +153,8 @@ class MM_PADDLE_id(RPADDLE_base):
         all_samples = torch.cat([support.to(self.device), query.to(self.device)], 1)
 
         feature_dim = all_samples.size(-1)
+
+        # Optimization loop
         for i in range(self.n_iter):
 
             prototypes_old = self.prototypes.clone()
@@ -183,50 +170,8 @@ class MM_PADDLE_id(RPADDLE_base):
             self.update_prot(all_samples, all_u)
 
             t_end = time.time()
-            # if i == self.n_iter - 1:
-            #     print(u_old.isnan().any(), self.u.isnan().any())
+
             criterions = self.get_criterions(prototypes_old, theta_old, u_old)
             self.record_convergence(timestamp=t_end - t0, criterions=criterions)
 
-        # print("Support : ", self.theta[0, :100].cpu().numpy())
-        # print("Query : ", self.theta[0, 100:].cpu().numpy())
-
         self.record_acc(y_q=y_q, indexes_outliers_query=idx_outliers_query)
-
-
-class MM_PADDLE_glasso(MM_PADDLE_id):
-    def __init__(self, backbone, device, log_file, args):
-        super().__init__(backbone=backbone, device=device, log_file=log_file, args=args)
-        self.id_cov = False
-
-    def inv_sqrt(self, symmat):
-        """
-        inputs:
-            symmat : torch.Tensor of shape [n_task, feature_dim, feature_dim]
-
-        returns:
-            sqrt : torch.Tensor of shape [n_task, feature_dim, feature_dim]
-        """
-        s, U = torch.linalg.eigh(symmat)
-        sqrt = U @ torch.diag_embed(s ** (-0.5)) @ U.transpose(-1, -2)
-        return sqrt
-
-    def init_params(self, support, y_s, query):
-
-        cov = Glasso_cov_estimate(support, y_s, self.n_class, self.device)
-        super().init_params(support, y_s, query)
-        self.q = self.inv_sqrt(cov)
-
-    def rho(self, samples):
-        transformed_samples = (
-            self.q.unsqueeze(1) @ samples.unsqueeze(2).unsqueeze(-1)
-        ).squeeze(-1)
-        dist_2 = (transformed_samples - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
-        return dist_2 + self.eps
-
-    def rho_beta(self, samples):
-        transformed_samples = (
-            self.q.unsqueeze(1) @ samples.unsqueeze(2).unsqueeze(-1)
-        ).squeeze(-1)
-        dist_2 = (transformed_samples - self.prototypes.unsqueeze(1)).norm(dim=-1) ** 2
-        return (dist_2 + self.eps) ** self.beta

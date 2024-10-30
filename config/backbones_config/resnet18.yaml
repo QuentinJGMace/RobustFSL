@@ -29,5 +29,5 @@ OPTIM:
 DISTRIBUTED:
     cuda: True
     seed: 2020
-    ckpt_path: 'checkpoints/cifar10/softmax/resnet18_oslo' # path model checkpoint
+    ckpt_path: 'checkpoints/mini/softmax/resnet18' # path model checkpoint
     log_path: 'logs' # path to where log files will be saved 

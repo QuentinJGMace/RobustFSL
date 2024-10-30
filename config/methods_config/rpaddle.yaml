@@ -2,10 +2,12 @@ METHOD:
   name_method: 'RPADDLE'
   iter: 1000
   lambd: 75
-  lr : 0.1
-  beta : 1.5
-  kappa : 200
+  lr : 0.001 # 0.001 for adam, 0.1 for sgd
+  beta : 2.
+  kappa : 0
   id_cov : True
+  optimizer: 'adam'
   acc_clustering: False
   tunable: False
   plot: False
+  temp: 1
