@@ -1,5 +1,6 @@
 import argparse
-import wandb
+
+# import wandb
 import numpy as np
 from tqdm import tqdm
 import pickle
@@ -7,6 +8,7 @@ import torch.nn.functional as F
 from typing import List
 
 from src.api.cfg_utils import load_cfg_from_cfg_file, merge_cfg_from_list
+import copy
 
 
 def save_pickle(file, data):
@@ -25,20 +27,6 @@ def wrap_tqdm(data_loader, disable_tqdm):
     else:
         tqdm_loader = tqdm(data_loader, total=len(data_loader))
     return tqdm_loader
-
-
-def init_wandb(args):
-    # start a new wandb run to track this script
-    resume = "allow" if args.resume else "never"
-    wandb.init(
-        # set the wandb project where this run will be logged
-        project="RFSL",
-        # track hyperparameters and run metadata
-        config=args,
-        id=args.name,
-        name=args.name,
-        resume=resume,
-    )
 
 
 def parse_args(method=None) -> argparse.Namespace:
@@ -61,3 +49,48 @@ def parse_args(method=None) -> argparse.Namespace:
         cfg = merge_cfg_from_list(cfg, args.opts)
     cfg.n_class = cfg.num_classes_test
     return cfg
+
+
+def load_main_config():
+
+    cfg = load_cfg_from_cfg_file("config/main_config.yaml")
+
+    return cfg
+
+
+def merge_method_cfg(cfg, method_name):
+    """Merges a method in the current config
+
+    Does not modify the old config, returns a new one
+    """
+    method_config_path = "config/methods_config/{}.yaml".format(method_name)
+    modified_cfg = copy.deepcopy(cfg)
+
+    modified_cfg.update(load_cfg_from_cfg_file(method_config_path))
+    return modified_cfg
+
+
+def merge_backbone_cfg(cfg, backbone_name):
+
+    """Merges a backbone in the current config
+
+    Does not modify the old config, returns a new one"""
+
+    backbone_config_path = "config/backbones_config/{}.yaml".format(backbone_name)
+    modified_cfg = copy.deepcopy(cfg)
+
+    modified_cfg.update(load_cfg_from_cfg_file(backbone_config_path))
+    return modified_cfg
+
+
+def merge_dataset_cfg(cfg, dataset_name):
+
+    """Merges a dataset in the current config
+
+    Does not modify the old config, returns a new one"""
+
+    dataset_config_path = "config/datasets_config/config_{}.yaml".format(dataset_name)
+    modified_cfg = copy.deepcopy(cfg)
+
+    modified_cfg.update(load_cfg_from_cfg_file(dataset_config_path))
+    return modified_cfg
