@@ -69,7 +69,5 @@ def load_checkpoint(model, model_path, device, type="best"):
                 new_state_dict[name] = v
 
                 # has_to_be_strict = False # no fully connected layer in this checkpoint
-        # print(model.state_dict().keys())
-        # print("--------------------")
-        # print(new_state_dict.keys())
+
         model.load_state_dict(new_state_dict, strict=False)

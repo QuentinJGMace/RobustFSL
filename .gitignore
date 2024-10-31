@@ -1,5 +1,4 @@
 random/
-config/
 checkpoints/
 data/
 logs/
@@ -9,8 +8,6 @@ data
 .log/
 wandb/
 results_few_shot/
-*.ipynb
-*.txt
 
 .pre-commit-config.yaml
 

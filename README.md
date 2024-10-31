@@ -14,15 +14,24 @@ Repository used to implement and test RobustFSL methods. In particular the one d
     - run `python src/api/load_backbones_from_hub.py`
  This should download the backbones trained on miniimagenet used during my internship (they are publicly available here : https://huggingface.co/QuentinJG/ResNet18-miniimagenet and here : https://huggingface.co/QuentinJG/FeatResNet12-miniimagenet)
 
-2) Download the datasets
+2) Download the datasets (or download only the features)
 
     - MiniImagenet:
 
         You can download miniimagenet here : https://www.kaggle.com/datasets/arjunashok33/miniimagenet
 
-        The splits are avalaible on in this repo inside `splits/miniimagenet` and should be moved to the root of the miniimagenet folder
+        The splits are avalaible on in this repo inside `splits/miniimagenet` and should be moved to the root of the miniimagenet folder (data/miniimagenet)
 
-    - Cifar10 : TODO
+    - Cifar10 : 
+        You can download Cifar10 here : https://www.cs.toronto.edu/~kriz/cifar.html (select the python version)
+
+        Then use the notebook read_data_cifar10.ipynb to format the dataset in a "one folder per class" manner.
+
+        The dataset should be placed in the "data/cifar10" folder
+
+    All data should be stored in a "data" folder at the root of the repository.
+
+    - Optionaly, one can download the features used for my work on this link https://drive.google.com/drive/folders/15RYB3y4qT4FU-PQlM0LTDwLGg2i8fv9i?usp=sharing
 
 3) Extract the features
     - run `python src/api/extract_features.py`
@@ -38,7 +47,9 @@ Repository used to implement and test RobustFSL methods. In particular the one d
         An example is given at the end of the src/experiment/run_experiment.py file
 
 ## Logs and results
-Main results from my work are all inside the `parse_experiments.ipynb` notebook, logs used to create those results are available at this link : TODO
+Main results from my work are all inside the `parse_experiments.ipynb` notebook, logs used to create those results are available at this link : https://drive.google.com/drive/folders/15RYB3y4qT4FU-PQlM0LTDwLGg2i8fv9i?usp=sharing
+
+It contains all the logs used in the log.zip file. One can reexecute the `parse_experiment` notebook using those logs.
 
 ## Repo structure
 

@@ -6,6 +6,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as T
 from tqdm import tqdm
+import copy
 
 from src.backbones import get_backbone, load_checkpoint
 from src.dataset import DATASET_LIST, build_transform, initialize_data_loaders
@@ -14,6 +15,9 @@ from src.api.utils import (
     merge_cfg_from_list,
     save_pickle,
     wrap_tqdm,
+    load_main_config,
+    merge_backbone_cfg,
+    merge_dataset_cfg,
 )
 
 torch.cuda.empty_cache()
@@ -69,6 +73,8 @@ def extract_features(args, backbone, data_loader, set_name, device, disable_tqdm
     filepath = os.path.join(
         f"data/{args.dataset}/saved_features/{set_name}_features_{args.backbone}.pkl"
     )
+    if not os.path.exists(os.path.dirname(filepath)):
+        os.makedirs(os.path.dirname(filepath))
     save_pickle(
         filepath,
         {
@@ -78,65 +84,151 @@ def extract_features(args, backbone, data_loader, set_name, device, disable_tqdm
     )
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Main")
-    cfg = load_cfg_from_cfg_file("config/main_config.yaml")
-    parser.add_argument("--opts", default=None, nargs=argparse.REMAINDER)
-    args = parser.parse_args()
-    if args.opts is not None:
-        cfg = merge_cfg_from_list(cfg, args.opts)
-    dataset_config = "config/datasets_config/config_{}.yaml".format(cfg.dataset)
-    method_config = "config/methods_config/{}.yaml".format(cfg.method)
-    backbone_config = "config/backbones_config/{}.yaml".format(cfg.backbone)
-    cfg.update(load_cfg_from_cfg_file(dataset_config))
-    cfg.update(load_cfg_from_cfg_file(method_config))
-    cfg.update(load_cfg_from_cfg_file(backbone_config))
-    if args.opts is not None:
-        cfg = merge_cfg_from_list(cfg, args.opts)
-    cfg.n_class = cfg.num_classes_test
+def extract_all_features(datasets_list, backbones_list):
+    """
+    Extracts features for all datasets and backbones.
 
-    return cfg
+    Args:
+        datasets_list: list of dataset names
+        backbones_list: list of backbone names
+
+    Returns:
+        None
+    """
+
+    cfg = load_main_config()
+    device = torch.device(cfg.device)
+
+    for dataset_name in datasets_list:
+        for backbone_name in backbones_list:
+
+            if cfg.seed is not None:
+                random.seed(cfg.seed)
+                torch.manual_seed(cfg.seed)
+                np.random.seed(cfg.seed)
+                cudnn.deterministic = True
+
+            modified_cfg = copy.deepcopy(cfg)
+            modified_cfg = merge_dataset_cfg(cfg, dataset_name)
+            modified_cfg = merge_backbone_cfg(modified_cfg, backbone_name)
+            modified_cfg.dataset = dataset_name
+            modified_cfg.backbone = backbone_name
+
+            args = modified_cfg
+
+            dataset = DATASET_LIST[args.dataset](args.dataset_path)
+            preprocess_transform = build_transform(
+                size=args.input_size, jitter=False, enlarge=args.enlarge, augment=False
+            )
+            data_loaders = initialize_data_loaders(
+                args=args,
+                dataset=dataset,
+                preprocess=preprocess_transform,
+            )
+            backbone = get_backbone(args).to(device)
+            checkpoint_path = args.ckpt_path
+
+            print(
+                f"Currently extracting features for dataset: {dataset_name} and backbone: {backbone_name}"
+            )
+            print(f"Checkpoint path: {checkpoint_path}")
+            load_checkpoint(backbone, checkpoint_path, device, type="best")
+            print("LOAD succesfull")
+
+            if not os.path.exists(
+                f"data/{args.dataset}/saved_features/train_features_{args.backbone}.pkl"
+            ):
+                print("Extracting features from train set")
+                extract_features(
+                    args, backbone, data_loaders["train"], "train", device=device
+                )
+            if not os.path.exists(
+                f"data/{args.dataset}/saved_features/val_features_{args.backbone}.pkl"
+            ):
+                print("Extracting features from val set")
+                extract_features(
+                    args, backbone, data_loaders["val"], "val", device=device
+                )
+            if not os.path.exists(
+                f"data/{args.dataset}/saved_features/test_features_{args.backbone}.pkl"
+            ):
+                print("Extracting features from test set")
+                extract_features(
+                    args, backbone, data_loaders["test"], "test", device=device
+                )
+
+            print(
+                f"Features extracted for dataset: {dataset_name} and backbone: {backbone_name}"
+            )
+            print("---------------------------------------------------")
+
+    return
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    device = torch.device("cuda" if args.cuda else "cpu")
+    datasets_list = ["miniimagenet"]
+    backbones_list = ["feat_resnet12"]
 
-    if args.seed is not None:
-        random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        np.random.seed(args.seed)
-        cudnn.deterministic = True
+    extract_all_features(datasets_list, backbones_list)
+    print("Extracted all features")
 
-    dataset = DATASET_LIST[args.dataset](args.dataset_path)
-    preprocess_transform = build_transform(
-        size=args.input_size, jitter=False, enlarge=args.enlarge, augment=False
-    )
-    data_loaders = initialize_data_loaders(
-        args=args,
-        dataset=dataset,
-        preprocess=preprocess_transform,
-    )
-    backbone = get_backbone(args).to(device)
-    checkpoint_path = args.ckpt_path
-    print(args.dataset)
-    print(args.ckpt_path)
-    print(args.backbone)
-    print(checkpoint_path)
-    load_checkpoint(backbone, checkpoint_path, device, type="best")
-    print("LOAD succesfull")
-    if not os.path.exists(
-        f"data/{args.dataset}/saved_features/train_features_{args.backbone}.pkl"
-    ):
-        print("Extracting features from train set")
-        extract_features(args, backbone, data_loaders["train"], "train", device=device)
-    if not os.path.exists(
-        f"data/{args.dataset}/saved_features/val_features_{args.backbone}.pkl"
-    ):
-        print("Extracting features from val set")
-        extract_features(args, backbone, data_loaders["val"], "val", device=device)
-    if not os.path.exists(
-        f"data/{args.dataset}/saved_features/test_features_{args.backbone}.pkl"
-    ):
-        print("Extracting features from test set")
-        extract_features(args, backbone, data_loaders["test"], "test", device=device)
+# def parse_args() -> argparse.Namespace:
+#     parser = argparse.ArgumentParser(description="Main")
+#     cfg = load_cfg_from_cfg_file("config/main_config.yaml")
+#     parser.add_argument("--opts", default=None, nargs=argparse.REMAINDER)
+#     args = parser.parse_args()
+#     if args.opts is not None:
+#         cfg = merge_cfg_from_list(cfg, args.opts)
+#     dataset_config = "config/datasets_config/config_{}.yaml".format(cfg.dataset)
+#     method_config = "config/methods_config/{}.yaml".format(cfg.method)
+#     backbone_config = "config/backbones_config/{}.yaml".format(cfg.backbone)
+#     cfg.update(load_cfg_from_cfg_file(dataset_config))
+#     cfg.update(load_cfg_from_cfg_file(method_config))
+#     cfg.update(load_cfg_from_cfg_file(backbone_config))
+#     if args.opts is not None:
+#         cfg = merge_cfg_from_list(cfg, args.opts)
+#     cfg.n_class = cfg.num_classes_test
+
+#     return cfg
+
+# if __name__ == "__main__":
+#     args = parse_args()
+#     device = torch.device("cuda" if args.cuda else "cpu")
+
+#     if args.seed is not None:
+#         random.seed(args.seed)
+#         torch.manual_seed(args.seed)
+#         np.random.seed(args.seed)
+#         cudnn.deterministic = True
+
+#     dataset = DATASET_LIST[args.dataset](args.dataset_path)
+#     preprocess_transform = build_transform(
+#         size=args.input_size, jitter=False, enlarge=args.enlarge, augment=False
+#     )
+#     data_loaders = initialize_data_loaders(
+#         args=args,
+#         dataset=dataset,
+#         preprocess=preprocess_transform,
+#     )
+#     backbone = get_backbone(args).to(device)
+#     checkpoint_path = args.ckpt_path
+#     print(args.ckpt_path)
+#     print(args.backbone)
+#     print(checkpoint_path)
+#     load_checkpoint(backbone, checkpoint_path, device, type="best")
+#     print("LOAD succesfull")
+#     if not os.path.exists(
+#         f"data/{args.dataset}/saved_features/train_features_{args.backbone}.pkl"
+#     ):
+#         print("Extracting features from train set")
+#         extract_features(args, backbone, data_loaders["train"], "train", device=device)
+#     if not os.path.exists(
+#         f"data/{args.dataset}/saved_features/val_features_{args.backbone}.pkl"
+#     ):
+#         print("Extracting features from val set")
+#         extract_features(args, backbone, data_loaders["val"], "val", device=device)
+#     if not os.path.exists(
+#         f"data/{args.dataset}/saved_features/test_features_{args.backbone}.pkl"
+#     ):
+#         print("Extracting features from test set")
+#         extract_features(args, backbone, data_loaders["test"], "test", device=device)

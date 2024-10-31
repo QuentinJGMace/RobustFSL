@@ -1,6 +1,6 @@
 EVAL:
     dataset: 'miniimagenet' # 'miniimagenet'        # Choose from: oxfordpets, eurosat, ucf101, caltech101, dtd, fgvcaircraft, food101, flowers102, stanfordcars, imagenet, sun397
-    method: 'mm_rpaddle'       # For zero-shot: 'em_dirichlet', 'hard_em_dirichlet', 'hard_kmeans', 'kl_kmeans', 'soft_kmeans', 'em_gaussian', 'em_gaussian_cov', 'inductive_clip'
+    method: 'paddle'       # For zero-shot: 'em_dirichlet', 'hard_em_dirichlet', 'hard_kmeans', 'kl_kmeans', 'soft_kmeans', 'em_gaussian', 'em_gaussian_cov', 'inductive_clip'
                                  # For few-shot: 'em_dirichlet', 'hard_em_dirichlet', 'paddle', 'alpha_tim', 'laplacian_shot', 'bdcspn'
     number_tasks: 1000       # Number of tasks to evaluate
     batch_size: 100            # Batch size for the evaluation
@@ -16,7 +16,7 @@ EVAL:
     n_outliers_support: 0
     n_outliers_query: 0
     outlier_params: 
-        name: 'ood'    # Choose between 'mult_unif', 'randn", "zero", "mult_randn", "swap_images"
+        name: 'mult_unif'    # Choose between 'mult_unif', 'randn", "zero", "mult_randn", "swap_images", "ood"
         max_outlier_mult: 10
         ood_dataset: 'cifar10'
         prop_perturbed_features : 0.3
@@ -28,3 +28,4 @@ EVAL:
     normalizer: 'default' # default normalises from the entier query set, and returns value between 0 and 1 (except for pt_map since it really degrades performances)
     save_mult_outlier: False
     sampling_method: 'dirichlet' # Choose between 'dirichlet', 'uniform' and 'balanced'
+    seed: 2020
