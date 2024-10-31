@@ -1,3 +1,5 @@
+"""This file implements the Evaluator_few_shot class, which is used to evaluate a method on a few-shot learning task."""
+
 import os
 from collections import defaultdict
 from tqdm import tqdm
@@ -276,6 +278,7 @@ class Evaluator_few_shot:
         results_task_time = []
         results_criterion = defaultdict(lambda: [])
 
+        # Query sampler
         sampling_method = SAMPLERS[self.args.sampling_method]
 
         # Evaluation over each task
@@ -284,7 +287,7 @@ class Evaluator_few_shot:
             disable_tqdm=self.disable_tqdm,
         ):
 
-            # Samplers
+            # Creates the sampler for the given task
             sampler = CategoriesSampler_few_shot(
                 self.args.batch_size,
                 self.args.k_eff,
@@ -298,6 +301,8 @@ class Evaluator_few_shot:
 
             sampler_support_query = sampling_method(sampler)
 
+            # Does the sampling of support and query for each task
+            # and generates the outliers
             test_loader_query, test_loader_support = [], []
             list_indices_outlier_support, list_indices_outlier_query = [], []
 
@@ -342,7 +347,8 @@ class Evaluator_few_shot:
                     self.true_mults["support"].append(mult_s)
                 if mult_q is not None:
                     self.true_mults["query"].append(mult_q)
-            # Prepare the tasks
+
+            # Used the generated support and query to generate the tasks
             task_generator = Task_Generator_Few_shot(
                 k_eff=self.args.k_eff,
                 shot=self.args.shots,
@@ -368,9 +374,11 @@ class Evaluator_few_shot:
                 args=self.args,
                 log_file=self.log_file,
             )
-            # set the optimal parameter for the method if the test set is used
-            if self.args.used_test_set == "test" and self.args.tunable:
-                self.set_method_opt_param()
+
+            # # Old code from Segolene, should never been used
+            # # set the optimal parameter for the method if the test set is used
+            # if self.args.used_test_set == "test" and self.args.tunable:
+            #     self.set_method_opt_param()
 
             # Run task
             logs = method.run_task(task_dic=tasks, shot=self.args.shots)
@@ -432,7 +440,7 @@ class Evaluator_few_shot:
 
     def report_results(self, mean_accuracies, mean_iid_accuracies, mean_times):
         """
-        Reports the results of the evaluation
+        Reports the results of the evaluation in the log file
 
         Args :
             mean_accuracies : Mean accuracies of the evaluation.
@@ -542,30 +550,32 @@ class Evaluator_few_shot:
                 )
             )
 
-    def save_predicted_means_per_class(self, method, label_correspondance):
-        """
-        Save the predicted means per class in a pickle
-        """
+    ## Debugging method to print the predicted means per class
+    ## Should not be used in general
+    # def save_predicted_means_per_class(self, method, label_correspondance):
+    #     """
+    #     Save the predicted means per class in a pickle
+    #     """
 
-        if hasattr(method, "prototypes"):
-            prototypes = method.prototypes.detach().cpu().numpy()
-        elif hasattr(method, "w"):
-            prototypes = method.w.detach().cpu().numpy()
-        elif hasattr(method, "weights"):
-            prototypes = method.weights.detach().cpu().numpy()
-        else:
-            raise ValueError("No prototypes found in the method")
+    #     if hasattr(method, "prototypes"):
+    #         prototypes = method.prototypes.detach().cpu().numpy()
+    #     elif hasattr(method, "w"):
+    #         prototypes = method.w.detach().cpu().numpy()
+    #     elif hasattr(method, "weights"):
+    #         prototypes = method.weights.detach().cpu().numpy()
+    #     else:
+    #         raise ValueError("No prototypes found in the method")
 
-        predicted_prototypes = {}
+    #     predicted_prototypes = {}
 
-        for k in label_correspondance.keys():
+    #     for k in label_correspondance.keys():
 
-            for task in range(len(prototypes)):
-                predicted_prototypes[label_correspondance[k][task]] = prototypes[
-                    task, k
-                ]
+    #         for task in range(len(prototypes)):
+    #             predicted_prototypes[label_correspondance[k][task]] = prototypes[
+    #                 task, k
+    #             ]
 
-        path = f"predicted_means/{self.args.method}.pth"
-        save_pickle(path, predicted_prototypes)
+    #     path = f"predicted_means/{self.args.method}.pth"
+    #     save_pickle(path, predicted_prototypes)
 
-        1 / 0
+    #     1 / 0
